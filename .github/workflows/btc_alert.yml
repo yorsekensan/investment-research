@@ -1,4 +1,4 @@
-name: BTC Macro Engine
+name: BTC Alert Engine
 
 on:
   schedule:
