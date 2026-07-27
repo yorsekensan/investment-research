@@ -11,7 +11,6 @@ st.caption("Quantitative regime monitoring.")
 @st.cache_data(ttl=60)
 def get_live_price(ticker):
     try:
-        # Fetching a 1-day snapshot with 1-minute intervals
         df = yf.download(ticker, period="1d", interval="1m", progress=False)
         if not df.empty:
             if isinstance(df.columns, pd.MultiIndex):
@@ -21,10 +20,10 @@ def get_live_price(ticker):
         pass
     return None
 
-# Defining variables before they are called (This prevents the NameError)
 btc_price = get_live_price("BTC-USD")
 bbca_price = get_live_price("BBCA.JK")
 adro_price = get_live_price("ADRO.JK")
+gold_price = get_live_price("GC=F") # Added Gold Pricing
 
 # ==========================================
 # 🟢 CRYPTO ECOSYSTEM SECTION
@@ -44,6 +43,24 @@ with col3:
 
 st.page_link("pages/btc_macro.py", label="Bitcoin (BTC) Macro Regime", icon="📈")
 
+# ==========================================
+# 🟡 COMMODITIES SECTION
+# ==========================================
+st.divider()
+
+col7, col8, col9 = st.columns([1, 8, 3])
+with col7:
+    # General gold/commodity icon
+    st.image("https://cdn-icons-png.flaticon.com/512/3665/3665961.png", width=40)
+with col8:
+    st.subheader("Commodities")
+with col9:
+    if gold_price:
+        st.metric(label="Gold (GC=F)", value=f"${gold_price:,.2f}")
+    else:
+        st.metric(label="Gold (GC=F)", value="Data Offline")
+
+st.page_link("pages/gold_macro.py", label="Gold (GC=F) Macro Matrix", icon="🪙")
 
 # ==========================================
 # 🔵 IDX EQUITIES SECTION
@@ -52,7 +69,6 @@ st.divider()
 
 col4, col5, col6 = st.columns([1, 8, 3])
 with col4:
-    # Changed from a bank logo to a general stock market/candlestick icon
     st.image("https://cdn-icons-png.flaticon.com/512/2422/2422323.png", width=40)
 with col5:
     st.subheader("IDX Equities")
