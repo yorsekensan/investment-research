@@ -1,4 +1,4 @@
-name: Gold Regime Alert Engine
+name: Gold Alert Engine
 
 on:
   schedule:
