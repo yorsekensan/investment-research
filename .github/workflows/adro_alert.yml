@@ -1,4 +1,4 @@
-name: ADRO Regime Alert Engine
+name: ADRO Alert Engine
 
 on:
   schedule:
