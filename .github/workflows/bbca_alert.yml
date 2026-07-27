@@ -1,4 +1,4 @@
-name: BBCA Equity Engine
+name: BBCA Alert Engine
 
 on:
   schedule:
