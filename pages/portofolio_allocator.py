@@ -1,130 +1,126 @@
 import streamlit as st
-import yfinance as yf
 import pandas as pd
-import plotly.graph_objects as go
+import plotly.express as px
+from io import BytesIO
+import datetime
 
 st.set_page_config(page_title="Portfolio Allocator", layout="wide")
 
-st.title("⚖️ Dynamic Portfolio Allocator")
-st.caption("Live valuation and algorithmic risk profiling.")
+st.title("⚖️ Quantitative Portfolio Allocator")
+st.caption("Dynamic risk-adjusted allocation across Equities, Commodities, and Crypto.")
 
-# --- 1. THE MASTER REGISTRY ---
-# To add future assets, simply add a new line here!
-ASSET_REGISTRY = {
-    "BTC-USD": {"name": "Bitcoin", "class": "Crypto", "currency": "USD"},
-    "BBCA.JK": {"name": "Bank Central Asia", "class": "Equity", "currency": "IDR"},
-    "ADRO.JK": {"name": "Adaro Energy", "class": "Equity", "currency": "IDR"}
-}
+# --- 1. USER INPUTS ---
+col1, col2 = st.columns(2)
+with col1:
+    capital = st.number_input("Total Investment Capital (IDR)", min_value=1000000, value=100000000, step=1000000, format="%d")
+with col2:
+    risk_profile = st.selectbox("Select Risk Profile", ["Conservative", "Balanced", "Aggressive", "Macro-Volatility (High Beta)"])
 
-# --- 2. LIVE DATA ENGINE ---
-@st.cache_data(ttl=120)
-def fetch_live_valuations():
-    try:
-        # Fetch all registered assets PLUS the USD/IDR exchange rate
-        tickers = list(ASSET_REGISTRY.keys()) + ["IDR=X"]
-        df = yf.download(tickers, period="1d", progress=False)['Close']
-        
-        # Handle single vs multi-index returns safely
-        if isinstance(df.columns, pd.MultiIndex):
-            df = df.iloc[-1].droplevel(1)
-        else:
-            df = df.iloc[-1]
-            
-        return df.to_dict()
-    except Exception:
-        return {}
+# --- 2. GOLD & MULTI-ASSET ALLOCATION LOGIC ---
+# Defined base allocation percentages based on macro risk models
+if risk_profile == "Conservative":
+    alloc = {"BBCA (Structural Equity)": 45, "Gold (Safe Haven)": 35, "ADRO (Cyclical Equity)": 10, "BTC (High Beta)": 5, "IDR Cash (Liquidity)": 5}
+elif risk_profile == "Balanced":
+    alloc = {"BBCA (Structural Equity)": 35, "Gold (Safe Haven)": 20, "ADRO (Cyclical Equity)": 15, "BTC (High Beta)": 20, "IDR Cash (Liquidity)": 10}
+elif risk_profile == "Aggressive":
+    alloc = {"BBCA (Structural Equity)": 25, "Gold (Safe Haven)": 10, "ADRO (Cyclical Equity)": 25, "BTC (High Beta)": 30, "IDR Cash (Liquidity)": 10}
+else: # Macro-Volatility
+    alloc = {"BBCA (Structural Equity)": 10, "Gold (Safe Haven)": 10, "ADRO (Cyclical Equity)": 25, "BTC (High Beta)": 50, "IDR Cash (Liquidity)": 5}
 
-live_prices = fetch_live_valuations()
+# Calculate exact fiat amounts
+data = []
+for asset, pct in alloc.items():
+    amount = capital * (pct / 100)
+    data.append({"Asset Class": asset, "Allocation (%)": pct, "Allocated Capital (IDR)": amount})
 
-if not live_prices:
-    st.error("⚠️ Failed to fetch market data. Please check your connection or Yahoo Finance status.")
-    st.stop()
+df_alloc = pd.DataFrame(data)
 
-# Ensure we have the FX rate for USD conversion
-usd_idr_rate = live_prices.get("IDR=X", 15500.0) # Fallback rate if FX fails
-
-# --- 3. DYNAMIC INPUT UI ---
-st.subheader("Asset Holdings")
-st.markdown("Enter your current unit holdings for each asset:")
-
-user_holdings = {}
-cols = st.columns(len(ASSET_REGISTRY))
-
-# Dynamically generate input fields based on the registry
-for idx, (ticker, details) in enumerate(ASSET_REGISTRY.items()):
-    with cols[idx]:
-        # Using min_value=0.0 and value=0.0 forces floats, preventing the MixedNumericTypesError
-        units = st.number_input(f"{details['name']} ({ticker})", min_value=0.0, value=0.0, step=0.01, format="%.4f")
-        user_holdings[ticker] = units
-
+# --- 3. VISUALIZATION ---
 st.divider()
+st.subheader(f"Recommended {risk_profile} Portfolio")
 
-# --- 4. VALUATION ALGORITHM ---
-total_value_idr = 0.0
-class_totals = {"Crypto": 0.0, "Equity": 0.0}
-portfolio_breakdown = []
+col_chart, col_table = st.columns([1.5, 1])
 
-for ticker, details in ASSET_REGISTRY.items():
-    units = user_holdings[ticker]
-    price = live_prices.get(ticker, 0.0)
+with col_chart:
+    fig = px.pie(df_alloc, values="Allocation (%)", names="Asset Class", hole=0.4, 
+                 color="Asset Class",
+                 color_discrete_map={
+                     "BBCA (Structural Equity)": "#00529b", # BCA Blue
+                     "Gold (Safe Haven)": "#FFD700",        # Gold
+                     "ADRO (Cyclical Equity)": "#8B4513",   # Coal Brown
+                     "BTC (High Beta)": "#F7931A",          # Bitcoin Orange
+                     "IDR Cash (Liquidity)": "#2E8B57"      # Cash Green
+                 })
+    fig.update_layout(template="plotly_dark", margin=dict(t=30, b=10, l=10, r=10))
+    st.plotly_chart(fig, use_container_width=True)
+
+with col_table:
+    st.dataframe(
+        df_alloc.style.format({"Allocated Capital (IDR)": "Rp {:,.0f}", "Allocation (%)": "{:.1f}%"}),
+        hide_index=True,
+        use_container_width=True
+    )
     
-    # Convert USD assets to Base Currency (IDR)
-    if details["currency"] == "USD":
-        value_idr = units * price * usd_idr_rate
-    else:
-        value_idr = units * price
+    st.info("💡 **Why this allocation?**\n" + 
+            ("Prioritizes wealth preservation with heavy weighting in BBCA and physical Gold." if risk_profile == "Conservative" else
+             "Balances structural compounding (BBCA) with macro inflation hedges (Gold/BTC)." if risk_profile == "Balanced" else
+             "Heavily weights cyclical cash flow (ADRO) and global liquidity momentum (BTC)." if risk_profile == "Aggressive" else
+             "Designed to aggressively capture macro liquidity cycles with maximum beta and minimal fiat exposure."))
+
+# --- 4. EXPORT ENGINE (EXCEL & PDF) ---
+st.divider()
+st.subheader("📥 Export Portfolio Simulation")
+st.write("Generate a downloadable data report or print the visual dashboard.")
+
+# Backend function to generate an in-memory Excel file
+def generate_excel(df, cap, profile):
+    output = BytesIO() # Stores file in server memory
+    with pd.ExcelWriter(output, engine='xlsxwriter') as writer: # Writes DataFrame
+        df.to_excel(writer, index=False, sheet_name='Allocation Plan') # Sheet configuration
+        workbook = writer.book # Access workbook
+        worksheet = writer.sheets['Allocation Plan'] # Access sheet
         
-    total_value_idr += value_idr
-    class_totals[details["class"]] += value_idr
-    
-    if value_idr > 0:
-        portfolio_breakdown.append({
-            "Asset": details['name'],
-            "Class": details['class'],
-            "Value (IDR)": value_idr
-        })
-
-# --- 5. RISK PROFILING ---
-if total_value_idr > 0:
-    crypto_weight = (class_totals["Crypto"] / total_value_idr) * 100
-    equity_weight = (class_totals["Equity"] / total_value_idr) * 100
-    
-    if crypto_weight <= 15:
-        profile = "CONSERVATIVE 🛡️"
-        desc = "Your portfolio is heavily anchored in traditional cash-flow equities. Low risk of systemic ruin."
-        p_color = "normal"
-    elif crypto_weight <= 40:
-        profile = "BALANCED ⚖️"
-        desc = "Standard institutional risk curve. Healthy mix of aggressive upside (Web3/Macro) and domestic stability."
-        p_color = "off"
-    else:
-        profile = "AGGRESSIVE 🚀"
-        desc = "High volatility exposure. Portfolio valuation will swing violently based on global macro liquidity."
-        p_color = "inverse"
-
-    # --- 6. RENDER DASHBOARD ---
-    col_metrics1, col_metrics2, col_metrics3 = st.columns(3)
-    col_metrics1.metric("Total Net Worth (IDR)", f"Rp{total_value_idr:,.0f}")
-    col_metrics2.metric("Crypto Exposure", f"{crypto_weight:.1f}%")
-    col_metrics3.metric("Assigned Risk Profile", profile, delta_color=p_color)
-    
-    st.info(f"**Manager's Note:** {desc}")
-    
-    st.divider()
-    
-    # Visual Breakdown
-    st.subheader("Capital Allocation")
-    
-    col_chart, col_table = st.columns([1.5, 1])
-    
-    with col_chart:
-        df_viz = pd.DataFrame(portfolio_breakdown)
-        fig = go.Figure(data=[go.Pie(labels=df_viz['Asset'], values=df_viz['Value (IDR)'], hole=.4, textinfo='label+percent')])
-        fig.update_layout(template="plotly_dark", margin=dict(t=0, b=0, l=0, r=0), height=350)
-        st.plotly_chart(fig, use_container_width=True)
+        # Professional Formatting
+        money_fmt = workbook.add_format({'num_format': 'Rp #,##0'}) # Currency
+        pct_fmt = workbook.add_format({'num_format': '0"%"'}) # Percentages
+        header_fmt = workbook.add_format({'bold': True, 'bg_color': '#333333', 'font_color': 'white'}) # Header
         
-    with col_table:
-        st.dataframe(df_viz.style.format({"Value (IDR)": "Rp{:,.0f}"}), hide_index=True, use_container_width=True)
+        # Set column widths
+        worksheet.set_column('A:A', 30) # Asset Class
+        worksheet.set_column('B:B', 15, pct_fmt) # Allocation %
+        worksheet.set_column('C:C', 25, money_fmt) # Capital IDR
         
-else:
-    st.warning("Enter your asset units above to generate your quantitative risk profile.")
+        # Write headers
+        for col_num, value in enumerate(df.columns.values):
+            worksheet.write(0, col_num, value, header_fmt) # Formats first row
+            
+        # Append Metadata
+        worksheet.write(len(df) + 2, 0, f"Simulation Date: {datetime.date.today()}", workbook.add_format({'italic': True}))
+        worksheet.write(len(df) + 3, 0, f"Risk Profile: {profile}", workbook.add_format({'italic': True}))
+        worksheet.write(len(df) + 4, 0, f"Total Capital: Rp {cap:,.0f}", workbook.add_format({'italic': True}))
+        
+    return output.getvalue() # Returns binary data
+
+col_export1, col_export2 = st.columns(2)
+
+with col_export1:
+    excel_data = generate_excel(df_alloc, capital, risk_profile)
+    # Renders Streamlit download button
+    st.download_button(
+        label="📊 Download Data as Excel (.xlsx)",
+        data=excel_data, # Passes binary data
+        file_name=f"YS_Portfolio_{risk_profile}.xlsx", # Set output filename
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", # MIME type
+        use_container_width=True
+    )
+
+with col_export2:
+    # JavaScript injection for PDF generation of the UI
+    st.components.v1.html(
+        """
+        <button onclick="window.parent.print()" style="width: 100%; padding: 12px; background-color: #FF4B4B; color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; font-family: sans-serif; font-size: 14px;">
+            🖨️ Save Dashboard as PDF (Includes Graphs)
+        </button>
+        """,
+        height=50
+    )
