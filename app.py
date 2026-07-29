@@ -16,7 +16,7 @@ adro_page = st.Page("pages/adro_matrix.py", title="ADRO", icon="⛏️")
 # --- NAVIGATION ROUTER ---
 # Grouping the pages creates sleek section headers in the sidebar
 pg = st.navigation({
-    "Public Access": [home_page, allocator_page],
+    "Public Access": [home_page, bbca_page, allocator_page],
     "Premium Analytics": [btc_page, gold_page, bbca_page, adro_page]
 })
 
