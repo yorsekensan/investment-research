@@ -51,18 +51,19 @@ st.write("")
 st.write("")
 
 # --- ASSET DISCOVERY ---
+st.write("")
+st.write("")
 st.subheader("🔍 Explore Quantitative Matrices")
+st.write("Access our live algorithmic models for equities, crypto, and commodities. All research is open and transparent.")
+
 col4, col5 = st.columns(2)
 
 with col4:
-    st.markdown("### Public Matrices")
-    st.write("Test our underlying logic on structural blue-chip equities.")
-    if st.button("View BBCA Matrix (Free)"):
-         st.switch_page("pages/bbca_matrix.py")
+    st.markdown("### Equities")
+    st.page_link("pages/bbca_matrix.py", label="BBCA (Structural Blue-Chip)", icon="🏦")
+    st.page_link("pages/adro_matrix.py", label="ADRO (Cyclical Equity)", icon="⛏️")
 
 with col5:
-    st.markdown("### Premium Matrices")
-    st.write("Unlock high-beta crypto and safe-haven macro indicators.")
-    st.page_link("pages/btc_macro.py", label="View Bitcoin", icon="🔒")
-    st.page_link("pages/gold_macro.py", label="View Gold", icon="🔒")
-    st.page_link("pages/adro_matrix.py", label="View ADRO", icon="🔒")
+    st.markdown("### Macro & Crypto")
+    st.page_link("pages/btc_macro.py", label="Bitcoin (High Beta)", icon="📈")
+    st.page_link("pages/gold_macro.py", label="Gold (Safe Haven)", icon="🪙")
