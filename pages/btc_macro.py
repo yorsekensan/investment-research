@@ -4,12 +4,12 @@ import pandas as pd
 import plotly.graph_objects as go
 
 # ==========================================
-# ⚙️ ASSET CONFIGURATION (Change these for each page)
+# ⚙️ ASSET CONFIGURATION
 # ==========================================
 PAGE_TITLE = "Bitcoin (BTC)"
 PAGE_ICON = "📈"
 TICKER = "BTC-USD"
-DESCRIPTION = "Live quantitative tracking of high-beta cryptocurrency liquidity and trend regimes."
+DESCRIPTION = "Live quantitative tracking of high-beta cryptocurrency. Includes Global USD Liquidity (DXY) and Risk-On Sentiment vs S&P 500."
 
 st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layout="wide")
 
@@ -17,115 +17,172 @@ st.title(f"{PAGE_ICON} {PAGE_TITLE} Macro Matrix")
 st.write(DESCRIPTION)
 st.divider()
 
-# --- 1. DATA FETCHING & INDICATORS ---
+# --- 1. DATA FETCHING (BTC, DXY, S&P 500) ---
 @st.cache_data(ttl=3600)
-def fetch_and_calculate(ticker):
-    df = yf.download(ticker, period="1y", progress=False)
-    if isinstance(df.columns, pd.MultiIndex):
-        df.columns = df.columns.droplevel(1)
+def fetch_custom_data():
+    # Fetch BTC
+    df_btc = yf.download(TICKER, period="1y", progress=False)
+    if isinstance(df_btc.columns, pd.MultiIndex):
+        df_btc.columns = df_btc.columns.droplevel(1)
         
-    if df.empty:
-        return None
+    # Fetch DXY (US Dollar Index)
+    df_dxy = yf.download("DX-Y.NYB", period="1y", progress=False)
+    if isinstance(df_dxy.columns, pd.MultiIndex):
+        df_dxy.columns = df_dxy.columns.droplevel(1)
         
-    # Moving Averages
-    df['SMA_50'] = df['Close'].rolling(window=50).mean()
-    df['SMA_200'] = df['Close'].rolling(window=200).mean()
+    # Fetch S&P 500
+    df_spx = yf.download("^GSPC", period="1y", progress=False)
+    if isinstance(df_spx.columns, pd.MultiIndex):
+        df_spx.columns = df_spx.columns.droplevel(1)
+
+    # 1. BTC Technical Indicators
+    df_btc['SMA_50'] = df_btc['Close'].rolling(window=50).mean()
+    df_btc['SMA_200'] = df_btc['Close'].rolling(window=200).mean()
     
     # RSI (14)
-    delta = df['Close'].diff()
+    delta = df_btc['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    rs = gain / loss
-    df['RSI'] = 100 - (100 / (1 + rs))
+    df_btc['RSI'] = 100 - (100 / (1 + (gain / loss)))
     
-    # MACD
-    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
-    df['MACD'] = exp1 - exp2
-    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    # MACD (Custom 13, 21 settings requested by user)
+    exp1 = df_btc['Close'].ewm(span=13, adjust=False).mean() # Fast EMA 13
+    exp2 = df_btc['Close'].ewm(span=21, adjust=False).mean() # Slow EMA 21
+    df_btc['MACD'] = exp1 - exp2
+    df_btc['Signal_Line'] = df_btc['MACD'].ewm(span=9, adjust=False).mean() # Standard 9-period Signal Line
+    df_btc['MACD_Hist'] = df_btc['MACD'] - df_btc['Signal_Line']
     
-    return df.dropna()
+    # 2. DXY Liquidity Indicator
+    df_dxy['SMA_50'] = df_dxy['Close'].rolling(window=50).mean()
+    
+    # 3. Relative Strength (20-Day Return vs S&P 500)
+    btc_20d = (df_btc['Close'].iloc[-1] - df_btc['Close'].iloc[-20]) / df_btc['Close'].iloc[-20] * 100
+    spx_20d = (df_spx['Close'].iloc[-1] - df_spx['Close'].iloc[-20]) / df_spx['Close'].iloc[-20] * 100
 
-df = fetch_and_calculate(TICKER)
+    return df_btc.dropna(), df_dxy.dropna(), btc_20d, spx_20d
 
-if df is None or df.empty:
-    st.error(f"Failed to fetch live data for {TICKER}. Yahoo Finance might be currently rate-limiting.")
+try:
+    df, df_dxy, btc_20d, spx_20d = fetch_custom_data()
+except Exception as e:
+    st.error("Failed to fetch live macro data. Yahoo Finance might be rate-limiting.")
     st.stop()
 
-current_price = df['Close'].iloc[-1]
+current_price = float(df['Close'].iloc[-1])
+current_rsi = float(df['RSI'].iloc[-1])
+current_macd = float(df['MACD'].iloc[-1])
+current_signal = float(df['Signal_Line'].iloc[-1])
+current_dxy = float(df_dxy['Close'].iloc[-1])
+dxy_sma50 = float(df_dxy['SMA_50'].iloc[-1])
 
-# --- 2. SIGNAL EVALUATION ---
+# --- 2. EVALUATING THE 6 QUANTITATIVE INDICATORS ---
 buy_count = 0
 sell_count = 0
+neutral_count = 0
 indicators = []
 
-# Indicator 1: Price vs 200 SMA
+# Ind 1: Price vs 200 SMA
 if current_price > df['SMA_200'].iloc[-1]:
     buy_count += 1
-    indicators.append({"Metric": "Trend (Price vs 200 SMA)", "Current Value": "Price Above 200 SMA", "Signal": "🟢 Buy"})
+    indicators.append({"Metric": "Macro Regime (Price vs 200 SMA)", "Current Value": "Price Above 200 SMA", "Signal": "🟢 Buy"})
 else:
     sell_count += 1
-    indicators.append({"Metric": "Trend (Price vs 200 SMA)", "Current Value": "Price Below 200 SMA", "Signal": "🔴 Sell"})
+    indicators.append({"Metric": "Macro Regime (Price vs 200 SMA)", "Current Value": "Price Below 200 SMA", "Signal": "🔴 Sell"})
 
-# Indicator 2: Golden/Death Cross
-if df['SMA_50'].iloc[-1] > df['SMA_200'].iloc[-1]:
+# Ind 2: Price vs 50 SMA
+if current_price > df['SMA_50'].iloc[-1]:
     buy_count += 1
-    indicators.append({"Metric": "Momentum (50 SMA vs 200 SMA)", "Current Value": "Golden Cross (50 > 200)", "Signal": "🟢 Buy"})
+    indicators.append({"Metric": "Medium-Term Trend (Price vs 50 SMA)", "Current Value": "Price Above 50 SMA", "Signal": "🟢 Buy"})
 else:
     sell_count += 1
-    indicators.append({"Metric": "Momentum (50 SMA vs 200 SMA)", "Current Value": "Death Cross (50 < 200)", "Signal": "🔴 Sell"})
+    indicators.append({"Metric": "Medium-Term Trend (Price vs 50 SMA)", "Current Value": "Price Below 50 SMA", "Signal": "🔴 Sell"})
 
-# Indicator 3: RSI
-current_rsi = df['RSI'].iloc[-1]
+# Ind 3: RSI (14)
 if current_rsi < 40:
     buy_count += 1
-    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "🟢 Buy (Oversold)"})
+    indicators.append({"Metric": "Momentum Oscillator (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f} (Oversold)", "Signal": "🟢 Buy"})
 elif current_rsi > 70:
     sell_count += 1
-    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "🔴 Sell (Overbought)"})
+    indicators.append({"Metric": "Momentum Oscillator (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f} (Overbought)", "Signal": "🔴 Sell"})
 else:
-    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "⚪ Neutral"})
+    neutral_count += 1
+    indicators.append({"Metric": "Momentum Oscillator (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "⚪ Neutral"})
 
-# Indicator 4: MACD
-if df['MACD'].iloc[-1] > df['Signal_Line'].iloc[-1]:
+# Ind 4: Custom Fast MACD (13, 21)
+if current_macd > current_signal:
     buy_count += 1
-    indicators.append({"Metric": "Trend Momentum (MACD)", "Current Value": "MACD > Signal Line", "Signal": "🟢 Buy"})
+    indicators.append({"Metric": "Trend Momentum (MACD 13,21)", "Current Value": "MACD > Signal Line", "Signal": "🟢 Buy"})
 else:
     sell_count += 1
-    indicators.append({"Metric": "Trend Momentum (MACD)", "Current Value": "MACD < Signal Line", "Signal": "🔴 Sell"})
+    indicators.append({"Metric": "Trend Momentum (MACD 13,21)", "Current Value": "MACD < Signal Line", "Signal": "🔴 Sell"})
 
-# --- 3. DASHBOARD UI LAYOUT ---
-col1, col2 = st.columns([2, 1])
+# Ind 5: CUSTOM MACRO - Global USD Liquidity
+if current_dxy < dxy_sma50:
+    buy_count += 1
+    indicators.append({"Metric": "Global Liquidity (DXY vs 50 SMA)", "Current Value": f"DXY at {current_dxy:.2f} (Weak USD)", "Signal": "🟢 Buy (Liquidity Expansion)"})
+else:
+    sell_count += 1
+    indicators.append({"Metric": "Global Liquidity (DXY vs 50 SMA)", "Current Value": f"DXY at {current_dxy:.2f} (Strong USD)", "Signal": "🔴 Sell (Liquidity Contraction)"})
+
+# Ind 6: CUSTOM MACRO - Risk Sentiment (BTC vs S&P 500)
+if btc_20d > spx_20d:
+    buy_count += 1
+    indicators.append({"Metric": "Risk-On Sentiment (BTC vs S&P 500 20d)", "Current Value": f"BTC ({btc_20d:.1f}%) > S&P 500 ({spx_20d:.1f}%)", "Signal": "🟢 Buy (Risk-On Capital Inflow)"})
+else:
+    sell_count += 1
+    indicators.append({"Metric": "Risk-On Sentiment (BTC vs S&P 500 20d)", "Current Value": f"BTC ({btc_20d:.1f}%) < S&P 500 ({spx_20d:.1f}%)", "Signal": "🔴 Sell (Risk-Off Capital Flight)"})
+
+# --- 3. DASHBOARD UI LAYOUT & CHARTS ---
+col1, col2 = st.columns([2.5, 1])
 
 with col1:
-    st.subheader("Price Action & Moving Averages")
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='Price', line=dict(color='#E5A937', width=2)))
-    fig.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], name='200 SMA', line=dict(color='white', width=1, dash='dash')))
-    fig.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#00529b', width=1)))
-    fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=30, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-    st.plotly_chart(fig, use_container_width=True)
+    tab1, tab2, tab3 = st.tabs(["📈 Price & SMAs", "⚡ RSI Oscillator", "📊 MACD (13,21) Histogram"])
+    
+    with tab1:
+        fig_price = go.Figure()
+        fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='BTC Price', line=dict(color='#F7931A', width=2)))
+        fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], name='200 SMA', line=dict(color='white', width=1, dash='dash')))
+        fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#00529b', width=1)))
+        fig_price.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
+        st.plotly_chart(fig_price, use_container_width=True)
+        
+    with tab2:
+        fig_rsi = go.Figure()
+        fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI (14)', line=dict(color='#9B59B6', width=2)))
+        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
+        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+        fig_rsi.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
+        st.plotly_chart(fig_rsi, use_container_width=True)
+
+    with tab3:
+        fig_macd = go.Figure()
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD (13,21)', line=dict(color='#3498DB', width=1.5)))
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='#E67E22', width=1.5)))
+        colors = ['#2ECC71' if val >= 0 else '#E74C3C' for val in df['MACD_Hist']]
+        fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='Histogram', marker_color=colors))
+        fig_macd.update_layout(template="plotly_dark", height=350, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
+        st.plotly_chart(fig_macd, use_container_width=True)
 
 with col2:
     st.subheader("Live Metrics")
-    st.metric("Current Price", f"{current_price:,.2f}")
-    st.metric("RSI (14)", f"{current_rsi:.1f}")
-    macd_status = "Bullish" if df['MACD'].iloc[-1] > df['Signal_Line'].iloc[-1] else "Bearish"
-    st.metric("MACD Status", macd_status)
+    st.metric("BTC Price", f"${current_price:,.2f}")
+    st.metric("DXY (Dollar Index)", f"{current_dxy:.2f}")
+    
+    spx_color = "normal" if btc_20d > spx_20d else "inverse"
+    st.metric("20D Rel. Strength", f"{btc_20d:.1f}%", delta=f"{btc_20d - spx_20d:.1f}% vs S&P 500", delta_color=spx_color)
 
-# --- 4. ALGORITHMIC RECOMMENDATION (UI Exact Match) ---
+# --- 4. ALGORITHMIC RECOMMENDATION ---
 st.divider()
 
-st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell)")
+st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral)")
 
-if buy_count > sell_count:
-    st.success("🟢 **MACRO BUY ZONE:** Trend and momentum indicators align bullish.")
-elif sell_count > buy_count:
-    st.error("🔴 **MACRO SELL ZONE:** Trend and momentum indicators align bearish.")
+if buy_count >= 4:
+    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}/6 Buy Signals).")
+elif sell_count >= 4:
+    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({sell_count}/6 Sell Signals).")
 else:
-    st.info("⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals between trend and momentum. Wait for a clear majority breakout.")
+    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral). Wait for a clear majority breakout.")
 
-with st.expander("📊 View Detailed Indicator Breakdown"):
+with st.expander("📊 View Detailed Indicator Breakdown", expanded=True):
     st.table(pd.DataFrame(indicators))
 
 st.write("")
