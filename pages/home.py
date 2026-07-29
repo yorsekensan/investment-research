@@ -38,32 +38,7 @@ with col2:
 with col3:
     st.metric(label="Bank Central Asia (BBCA)", value=f"Rp{bbca_price:,.0f}" if bbca_price else "Offline")
 
-# --- ALGORITHMIC VERDICT (GATED) ---
 st.divider()
-st.subheader("🤖 Algorithmic Verdict")
-st.write("Our quantitative engine has evaluated all active macro indicators for this asset.")
-
-# Toggle this to True to see what paid users see, False for free users
-is_premium = False 
-
-if is_premium:
-    # 🟢 WHAT PAID USERS SEE: The Unlocked Signal 
-    if buy_count >= 4:
-        st.success(f"🟢 **MACRO BUY ZONE** — Indicator Consensus: {buy_count} Buy Signals Aligned")
-    elif sell_count >= 4:
-        st.error(f"🔴 **MACRO SELL ZONE** — Indicator Consensus: {sell_count} Sell Signals Aligned")
-    else:
-        st.info(f"⚪ **NEUTRAL REGIME** — Consensus Mixed ({buy_count} Buy / {sell_count} Sell). Wait for alignment.")
-else:
-    # 🔒 WHAT FREE USERS SEE: The Paywall Box
-    st.markdown("""
-    <div style='background-color: #1E2127; padding: 30px; border-radius: 10px; border: 1px solid #444; text-align: center;'>
-        <h2 style='color: #888; margin-bottom: 5px;'>🔒 PREMIUM MACRO SIGNAL</h2>
-        <p style='color: #AAA; font-size: 16px;'>Indicator Consensus: <b>[ LOCKED ]</b></p>
-        <p style='color: #AAA; font-size: 16px; margin-bottom: 20px;'>Current Regime: <b>[ LOCKED ]</b></p>
-        <a href="#" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 12px 24px; border-radius: 5px; font-weight: bold; font-size: 16px;'>Upgrade to Unlock Signal ➔</a>
-    </div>
-    """, unsafe_allow_html=True)
 
 # --- CALL TO ACTION (THE FUNNEL) ---
 st.subheader("⚖️ Start Here: Design Your Portfolio")
@@ -72,6 +47,7 @@ st.write("Before diving into individual asset matrices, determine your baseline 
 if st.button("Launch Portfolio Allocator ➔", use_container_width=True, type="primary"):
     st.switch_page("pages/portofolio_allocator.py")
 
+st.write("")
 st.write("")
 
 # --- ASSET DISCOVERY ---
