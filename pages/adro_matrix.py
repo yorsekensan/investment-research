@@ -3,242 +3,137 @@ import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="ADRO Matrix", layout="wide")
+# ==========================================
+# ⚙️ ASSET CONFIGURATION (Change these for each page)
+# ==========================================
+PAGE_TITLE = "ADRO (Cyclical Equity)"
+PAGE_ICON = "⛏️"
+TICKER = "ADRO.JK"
+DESCRIPTION = "Live quantitative tracking of cyclical equities."
 
-st.title("⛏️ PT Alamtri Resources (ADRO.JK) Cyclical Matrix")
-st.caption("Commodity, Currency, and Trend Regime Monitoring")
+st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layout="wide")
 
-# --- 1. SAFE DATA FETCHING ---
-@st.cache_data(ttl=300)
-def fetch_adro_data():
-    try:
-        # We always fetch 2 years so the 200 DMA calculates correctly
-        df = yf.download("ADRO.JK", period="max", progress=False)
-        fx_df = yf.download("IDR=X", period="1y", progress=False)
+st.title(f"{PAGE_ICON} {PAGE_TITLE} Macro Matrix")
+st.write(DESCRIPTION)
+st.divider()
+
+# --- 1. DATA FETCHING & INDICATORS ---
+@st.cache_data(ttl=3600)
+def fetch_and_calculate(ticker):
+    df = yf.download(ticker, period="1y", progress=False)
+    if isinstance(df.columns, pd.MultiIndex):
+        df.columns = df.columns.droplevel(1)
         
-        if not df.empty and isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
-        if not fx_df.empty and isinstance(fx_df.columns, pd.MultiIndex):
-            fx_df.columns = fx_df.columns.droplevel(1)
-            
-        return df, fx_df
-    except Exception:
-        return pd.DataFrame(), pd.DataFrame()
+    if df.empty:
+        return None
+        
+    # Moving Averages
+    df['SMA_50'] = df['Close'].rolling(window=50).mean()
+    df['SMA_200'] = df['Close'].rolling(window=200).mean()
+    
+    # RSI (14)
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
+    rs = gain / loss
+    df['RSI'] = 100 - (100 / (1 + rs))
+    
+    # MACD
+    exp1 = df['Close'].ewm(span=12, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=26, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal_Line'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
+    return df.dropna()
 
-df, fx_df = fetch_adro_data()
+df = fetch_and_calculate(TICKER)
 
-if df.empty or len(df) < 200 or fx_df.empty:
-    st.warning("⚠️ Market data provider (yfinance) is temporarily busy or returning incomplete data. Please refresh in a few moments.")
+if df is None or df.empty:
+    st.error(f"Failed to fetch live data for {TICKER}. Yahoo Finance might be currently rate-limiting.")
     st.stop()
 
-# --- 2. CALCULATE INDICATORS ---
-df["MA50"] = df["Close"].rolling(50).mean()
-df["MA200"] = df["Close"].rolling(200).mean()
-df["pct_vs_200ma"] = (df["Close"] / df["MA200"] - 1) * 100
+current_price = df['Close'].iloc[-1]
 
-delta = df["Close"].diff()
-gain = delta.clip(lower=0).rolling(14).mean()
-loss = (-delta.clip(upper=0)).rolling(14).mean()
-rs = gain / loss
-df["RSI14"] = 100 - (100 / (1 + rs))
+# --- 2. SIGNAL EVALUATION ---
+buy_count = 0
+sell_count = 0
+indicators = []
 
-ma20 = df["Close"].rolling(20).mean()
-std20 = df["Close"].rolling(20).std()
-df["Upper_BB"] = ma20 + (2 * std20)
-df["Lower_BB"] = ma20 - (2 * std20)
-df["BB_pctB"] = (df["Close"] - df["Lower_BB"]) / (df["Upper_BB"] - df["Lower_BB"])
-
-fx_df["MA50"] = fx_df["Close"].rolling(50).mean()
-
-clean_df = df.dropna()
-clean_fx = fx_df.dropna()
-
-if clean_df.empty or clean_fx.empty:
-    st.warning("⚠️ Calculating technicals... Waiting for complete data history.")
-    st.stop()
-
-latest = clean_df.iloc[-1]
-latest_fx = clean_fx.iloc[-1]
-
-# --- 3. SCORING REGIME LOGIC ---
-buy_count, sell_count = 0, 0
-
-if latest["MA50"] > latest["MA200"]:
-    trend_status, trend_signal = "BULLISH", "🟢 BUY"
-    buy_count += 1 
-else: 
-    trend_status, trend_signal = "BEARISH", "🔴 SELL"
-    sell_count += 1
-
-if latest["pct_vs_200ma"] <= -15:
-    pct_status, pct_signal = "DEEP DISCOUNT", "🟢 BUY"
+# Indicator 1: Price vs 200 SMA
+if current_price > df['SMA_200'].iloc[-1]:
     buy_count += 1
-elif latest["pct_vs_200ma"] >= 15:
-    pct_status, pct_signal = "OVEREXTENDED", "🔴 SELL"
-    sell_count += 1
+    indicators.append({"Metric": "Trend (Price vs 200 SMA)", "Current Value": "Price Above 200 SMA", "Signal": "🟢 Buy"})
 else:
-    pct_status, pct_signal = "NEUTRAL", "⚪ HOLD"
+    sell_count += 1
+    indicators.append({"Metric": "Trend (Price vs 200 SMA)", "Current Value": "Price Below 200 SMA", "Signal": "🔴 Sell"})
 
-if latest["RSI14"] <= 35:
-    rsi_status, rsi_signal = "OVERSOLD", "🟢 BUY"
+# Indicator 2: Golden/Death Cross
+if df['SMA_50'].iloc[-1] > df['SMA_200'].iloc[-1]:
     buy_count += 1
-elif latest["RSI14"] >= 70:
-    rsi_status, rsi_signal = "OVERBOUGHT", "🔴 SELL"
-    sell_count += 1
+    indicators.append({"Metric": "Momentum (50 SMA vs 200 SMA)", "Current Value": "Golden Cross (50 > 200)", "Signal": "🟢 Buy"})
 else:
-    rsi_status, rsi_signal = "NEUTRAL", "⚪ HOLD"
+    sell_count += 1
+    indicators.append({"Metric": "Momentum (50 SMA vs 200 SMA)", "Current Value": "Death Cross (50 < 200)", "Signal": "🔴 Sell"})
 
-if latest["BB_pctB"] <= 0:
-    bb_status, bb_signal = "BELOW LOWER BAND", "🟢 BUY"
+# Indicator 3: RSI
+current_rsi = df['RSI'].iloc[-1]
+if current_rsi < 40:
     buy_count += 1
-elif latest["BB_pctB"] >= 1:
-    bb_status, bb_signal = "ABOVE UPPER BAND", "🔴 SELL"
+    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "🟢 Buy (Oversold)"})
+elif current_rsi > 70:
     sell_count += 1
+    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "🔴 Sell (Overbought)"})
 else:
-    bb_status, bb_signal = "WITHIN BANDS", "⚪ HOLD"
+    indicators.append({"Metric": "Overbought/Oversold (RSI 14)", "Current Value": f"RSI at {current_rsi:.1f}", "Signal": "⚪ Neutral"})
 
-if latest_fx["Close"] > latest_fx["MA50"]:
-    fx_status, fx_signal = "TAILWIND (Strong USD)", "🟢 BUY"
+# Indicator 4: MACD
+if df['MACD'].iloc[-1] > df['Signal_Line'].iloc[-1]:
     buy_count += 1
+    indicators.append({"Metric": "Trend Momentum (MACD)", "Current Value": "MACD > Signal Line", "Signal": "🟢 Buy"})
 else:
-    fx_status, fx_signal = "HEADWIND (Weak USD)", "🔴 SELL"
     sell_count += 1
+    indicators.append({"Metric": "Trend Momentum (MACD)", "Current Value": "MACD < Signal Line", "Signal": "🔴 Sell"})
 
-if buy_count >= 3:
-    verdict = "CYCLICAL BUY ZONE"
-    color = "normal"
-elif sell_count >= 3:
-    verdict = "CYCLICAL SELL ZONE"
-    color = "inverse"
-else:
-    verdict = "NEUTRAL REGIME"
-    color = "off"
+# --- 3. DASHBOARD UI LAYOUT ---
+col1, col2 = st.columns([2, 1])
 
-# --- 4. DASHBOARD UI & RECOMMENDATION ---
+with col1:
+    st.subheader("Price Action & Moving Averages")
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=df.index, y=df['Close'], name='Price', line=dict(color='#E5A937', width=2)))
+    fig.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], name='200 SMA', line=dict(color='white', width=1, dash='dash')))
+    fig.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#00529b', width=1)))
+    fig.update_layout(template="plotly_dark", margin=dict(l=0, r=0, t=30, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117', legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+    st.plotly_chart(fig, use_container_width=True)
+
+with col2:
+    st.subheader("Live Metrics")
+    st.metric("Current Price", f"{current_price:,.2f}")
+    st.metric("RSI (14)", f"{current_rsi:.1f}")
+    macd_status = "Bullish" if df['MACD'].iloc[-1] > df['Signal_Line'].iloc[-1] else "Bearish"
+    st.metric("MACD Status", macd_status)
+
+# --- 4. ALGORITHMIC RECOMMENDATION (UI Exact Match) ---
 st.divider()
 
-col1, col2, col3, col4, col5 = st.columns(5)
-col1.metric("Live Price", f"Rp{latest['Close']:,.0f}")
-col2.metric("Trend (50 vs 200)", trend_status)
-col3.metric("% vs 200 DMA", f"{latest['pct_vs_200ma']:+.2f}%")
-col4.metric("RSI (14)", f"{latest['RSI14']:.1f}")
-col5.metric("USD/IDR Overlay", "TAILWIND" if "TAILWIND" in fx_status else "HEADWIND")
+st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell)")
 
-st.divider()
-
-st.subheader("Algorithmic Recommendation")
-if verdict == "CYCLICAL BUY ZONE":
-    st.success(f"**🟢 {verdict}:** ADRO is showing structural weakness in price but strong underlying macro/technical setup. Accumulate for cyclical rebound.")
-elif verdict == "CYCLICAL SELL ZONE":
-    st.error(f"**🔴 {verdict}:** ADRO is technically overextended. Consider trimming positions or taking profits as momentum exhausts.")
+if buy_count > sell_count:
+    st.success("🟢 **MACRO BUY ZONE:** Trend and momentum indicators align bullish.")
+elif sell_count > buy_count:
+    st.error("🔴 **MACRO SELL ZONE:** Trend and momentum indicators align bearish.")
 else:
-    st.info(f"**⚪ {verdict}:** ADRO is chopping within normal structural bounds. Maintain current allocations and wait for a clear macro break.")
+    st.info("⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals between trend and momentum. Wait for a clear majority breakout.")
 
-with st.expander("📊 View Detailed Indicator Breakdown", expanded=False):
-    matrix_data = {
-        "Indicator": ["Trend (50 vs 200 DMA)", "Deviation from 200 DMA", "RSI (14)", "Bollinger %B", "USD/IDR Macro Overlay"],
-        "Current Value": [f"50DMA: Rp{latest['MA50']:,.0f}", f"{latest['pct_vs_200ma']:+.2f}%", f"{latest['RSI14']:.1f}", f"{latest['BB_pctB']:.2f}", f"Rp{latest_fx['Close']:,.0f}"],
-        "Condition": [trend_status, pct_status, rsi_status, bb_status, fx_status],
-        "Signal": [trend_signal, pct_signal, rsi_signal, bb_signal, fx_signal]
-    }
-    st.table(pd.DataFrame(matrix_data))
+with st.expander("📊 View Detailed Indicator Breakdown"):
+    st.table(pd.DataFrame(indicators))
 
-# --- ALGORITHMIC VERDICT (FULLY FREE & OPEN) ---
-st.divider()
-st.subheader("🤖 Algorithmic Verdict")
-st.write("Our quantitative engine has evaluated all active macro indicators for this asset.")
-
-# 🟢 UNLOCKED FOR EVERYONE: Display the real consensus signal
-if buy_count >= 4:
-    st.success(f"🟢 **MACRO BUY ZONE** — Indicator Consensus: {buy_count} Buy Signals Aligned")
-elif sell_count >= 4:
-    st.error(f"🔴 **MACRO SELL ZONE** — Indicator Consensus: {sell_count} Sell Signals Aligned")
-else:
-    st.info(f"⚪ **NEUTRAL REGIME** — Consensus Mixed ({buy_count} Buy / {sell_count} Sell). Wait for alignment.")
-
-# --- OPTIONAL SUPPORT / DONATION BANNER ---
 st.write("")
+
+# Support / Donate Banner
 st.markdown("""
 <div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
     <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
     <a href="https://trakteer.id/yourname" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
 </div>
 """, unsafe_allow_html=True)
-
-# --- 5. TIMEFRAME SELECTOR & INTERACTIVE CHARTS ---
-st.subheader("Price Action & Moving Averages")
-
-timeframe = st.radio(
-    "Select Chart Timeframe:",
-    ["3 Months", "6 Months", "1 Year", "2 Years", "5 Years", "Max"],
-    horizontal=True,
-    index=5 # Defaults to Max
-)
-
-end_date = clean_df.index.max()
-if timeframe == "3 Months":
-    start_date = end_date - pd.DateOffset(months=3)
-elif timeframe == "6 Months":
-    start_date = end_date - pd.DateOffset(months=6)
-elif timeframe == "1 Year":
-    start_date = end_date - pd.DateOffset(years=1)
-elif timeframe == "2 Years":
-    start_date = end_date - pd.DateOffset(years=2)
-elif timeframe == "5 Years":
-    start_date = end_date - pd.DateOffset(years=5)
-else:
-    start_date = clean_df.index.min()
-    
-plot_df = clean_df[clean_df.index >= start_date]
-
-# 1. Main Candlestick Chart (Fixed 200 DMA Color to Bright Cyan)
-fig_price = go.Figure()
-fig_price.add_trace(go.Candlestick(x=plot_df.index, open=plot_df['Open'], high=plot_df['High'], low=plot_df['Low'], close=plot_df['Close'], name='Price'))
-fig_price.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA50'], line=dict(color='orange', width=1.5), name='50-Day MA'))
-fig_price.add_trace(go.Scatter(x=plot_df.index, y=plot_df['MA200'], line=dict(color='#00FFFF', width=2), name='200-Day MA (Cyan)')) # <-- Brightened
-fig_price.update_layout(template="plotly_dark", xaxis_rangeslider_visible=False, height=450, margin=dict(l=10, r=10, t=30, b=10))
-fig_price.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-st.plotly_chart(fig_price, use_container_width=True)
-
-# 2. Sub-Charts Grid (3 Columns now)
-col_chart1, col_chart2, col_chart3 = st.columns(3)
-
-with col_chart1:
-    st.subheader("200 DMA Deviation (%)")
-    fig_dma = go.Figure()
-    fig_dma.add_trace(go.Scatter(x=plot_df.index, y=plot_df['pct_vs_200ma'], line=dict(color='#00FFFF', width=1.5), name='% vs 200DMA'))
-    fig_dma.add_hline(y=15, line_dash="dash", line_color="red", annotation_text="Overextended (+15%)")
-    fig_dma.add_hline(y=-15, line_dash="dash", line_color="green", annotation_text="Discount (-15%)")
-    fig_dma.add_hline(y=0, line_dash="dot", line_color="gray")
-    fig_dma.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=30, b=10))
-    fig_dma.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    st.plotly_chart(fig_dma, use_container_width=True)
-
-with col_chart2:
-    st.subheader("Relative Strength Index (RSI)")
-    fig_rsi = go.Figure()
-    fig_rsi.add_trace(go.Scatter(x=plot_df.index, y=plot_df['RSI14'], line=dict(color='purple', width=1.5), name='RSI (14)'))
-    fig_rsi.add_hline(y=70, line_dash="dash", line_color="red", annotation_text="70")
-    fig_rsi.add_hline(y=35, line_dash="dash", line_color="green", annotation_text="35")
-    fig_rsi.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=30, b=10))
-    fig_rsi.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    st.plotly_chart(fig_rsi, use_container_width=True)
-
-with col_chart3:
-    st.subheader("Bollinger Bands")
-    fig_bb = go.Figure()
-    fig_bb.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Upper_BB'], line=dict(color='gray', dash='dot'), name='Upper'))
-    fig_bb.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Lower_BB'], line=dict(color='gray', dash='dot'), fill='tonexty', fillcolor='rgba(128, 128, 128, 0.15)', name='Lower'))
-    fig_bb.add_trace(go.Scatter(x=plot_df.index, y=plot_df['Close'], line=dict(color='white', width=1.2), name='Price'))
-    fig_bb.update_layout(template="plotly_dark", height=280, margin=dict(l=10, r=10, t=30, b=10))
-    fig_bb.update_xaxes(rangebreaks=[dict(bounds=["sat", "mon"])])
-    st.plotly_chart(fig_bb, use_container_width=True)
-    
-# --- 6. MACRO RESEARCH EXPANDER ---
-with st.expander("View Manager's Research Thesis"):
-    st.markdown("""
-    **The Cyclical Nature of ADRO:**
-    Unlike financial assets (like BBCA) that compound steadily, ADRO trades structurally based on commodity and macro cycles. 
-    *   **The 15% DMA Rule:** Coal cycles create violent swings. We look for deep -15% structural discounts from the 200-day average to initiate cyclical accumulation.
-    *   **The FX Component:** ADRO generates revenue in USD but pays domestic costs in IDR. A strengthening dollar (USD/IDR > 50MA) creates an artificial margin expansion for the asset.
-    """)
