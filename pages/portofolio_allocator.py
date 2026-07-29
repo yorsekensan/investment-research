@@ -72,9 +72,9 @@ with col_table:
 # --- EXPORT ENGINE ---
 st.divider()
 st.subheader("📥 Export Portfolio Simulation")
-st.write("Download your custom allocation as a raw data file or an institutional report.")
+st.write("Download your raw data spreadsheet or save the visual dashboard as a PDF.")
 
-# 1. Excel Generator 
+# Excel Generator (In-memory BytesIO)
 def generate_excel(df, cap, profile):
     output = BytesIO()
     with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -82,7 +82,6 @@ def generate_excel(df, cap, profile):
         workbook = writer.book
         worksheet = writer.sheets['Allocation Plan']
         
-        # Formatting
         money_fmt = workbook.add_format({'num_format': 'Rp #,##0'})
         pct_fmt = workbook.add_format({'num_format': '0"%"'})
         header_fmt = workbook.add_format({'bold': True, 'bg_color': '#1F4E78', 'font_color': 'white', 'align': 'center'})
@@ -100,81 +99,31 @@ def generate_excel(df, cap, profile):
         
     return output.getvalue()
 
-# 2. PDF Generator (With Matplotlib Chart)
-def generate_pdf(df, cap, profile):
-    pdf = FPDF()
-    pdf.add_page()
-    
-    # Header
-    pdf.set_fill_color(31, 78, 120)
-    pdf.set_text_color(255, 255, 255)
-    pdf.set_font("helvetica", "B", 16)
-    pdf.cell(0, 15, "YS Investment Research - Portfolio Allocation", ln=True, align="C", fill=True)
-    
-    # Meta Info
-    pdf.set_text_color(0, 0, 0)
-    pdf.set_font("helvetica", "I", 10)
-    pdf.cell(0, 10, f"Simulation Date: {datetime.date.today()} | Profile: {profile}", ln=True, align="C")
-    pdf.ln(5)
-    
-    # Generate Pie Chart Image (In-Memory)
-    fig, ax = plt.subplots(figsize=(6, 4))
-    color_map = {
-        "BBCA (Structural Equity)": "#00529b",
-        "Gold (Safe Haven)": "#FFD700",
-        "ADRO (Cyclical Equity)": "#8B4513",
-        "BTC (High Beta)": "#F7931A",
-        "IDR Cash (Liquidity)": "#2E8B57"
-    }
-    colors = [color_map.get(asset, "#999999") for asset in df["Asset Class"]]
-    ax.pie(df["Allocation (%)"], labels=df["Asset Class"], autopct='%1.1f%%', startangle=140, colors=colors, textprops=dict(color="black", fontsize=8))
-    ax.axis('equal') 
-    
-    img_buffer = BytesIO()
-    plt.savefig(img_buffer, format='png', bbox_inches='tight', dpi=300)
-    img_buffer.seek(0)
-    plt.close(fig) # Prevent memory leaks
-    
-    # Embed Chart into PDF
-    pdf.image(img_buffer, x=30, y=pdf.get_y(), w=150)
-    pdf.ln(95) 
-    
-    # Table Header
-    pdf.set_font("helvetica", "B", 10)
-    pdf.set_fill_color(240, 240, 240)
-    pdf.cell(90, 10, "Asset Class", border=1, align="C", fill=True)
-    pdf.cell(40, 10, "Target (%)", border=1, align="C", fill=True)
-    pdf.cell(60, 10, "Allocated (IDR)", border=1, align="C", fill=True)
-    pdf.ln()
-    
-    # Table Rows
-    pdf.set_font("helvetica", "", 10)
-    for index, row in df.iterrows():
-        pdf.cell(90, 10, str(row["Asset Class"]), border=1)
-        pdf.cell(40, 10, f"{row['Allocation (%)']}%", border=1, align="C")
-        pdf.cell(60, 10, f"Rp {row['Allocated Capital (IDR)']:,.0f}", border=1, align="R")
-        pdf.ln()
-        
-    # Footer
-    pdf.ln(10)
-    pdf.set_font("helvetica", "B", 11)
-    pdf.cell(0, 10, f"Total Capital Allocated: Rp {cap:,.0f}", ln=True)
-    
-    return pdf.output(dest="S")
-
-# --- UI BUTTONS ---
 col_export1, col_export2 = st.columns(2)
 
 with col_export1:
     try:
         excel_data = generate_excel(df_alloc, capital, risk_profile)
-        st.download_button(label="📊 Download Excel Data (.xlsx)", data=excel_data, file_name=f"YS_Portfolio_{risk_profile}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", use_container_width=True)
+        st.download_button(
+            label="📊 Download Excel Data (.xlsx)",
+            data=excel_data,
+            file_name=f"YS_Portfolio_{risk_profile}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            use_container_width=True
+        )
     except Exception as e:
-        st.error("Excel generation failed. Check requirements.txt.")
+        st.error("Excel generation encountered an issue.")
 
 with col_export2:
-    try:
-        pdf_data = generate_pdf(df_alloc, capital, risk_profile)
-        st.download_button(label="📄 Download Institutional Report (.pdf)", data=pdf_data, file_name=f"YS_Portfolio_{risk_profile}.pdf", mime="application/pdf", use_container_width=True)
-    except Exception as e:
-        st.error("PDF generation failed. Check requirements.txt.")
+    # Secure JavaScript bridge to trigger browser's native Print-to-PDF engine
+    # This guarantees your Plotly Donut Chart and dark-mode UI are perfectly captured!
+    st.components.v1.html(
+        """
+        <div style="padding-top: 2px;">
+            <button onclick="window.parent.print()" style="width: 100%; height: 44px; background-color: #262730; color: #fafafa; border: 1px solid #41424B; border-radius: 8px; cursor: pointer; font-weight: 500; font-family: 'Source Sans Pro', sans-serif; font-size: 14px; transition: all 0.3s ease;">
+                🖨️ Save Dashboard as PDF (Includes Donut Chart)
+            </button>
+        </div>
+        """,
+        height=60
+    )
