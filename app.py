@@ -5,6 +5,7 @@ import streamlit as st
 # 🟢 Public / Free Tier Pages
 home_page = st.Page("pages/home.py", title="Command Center", icon="🏠", default=True)
 allocator_page = st.Page("pages/portofolio_allocator.py", title="Portfolio Allocator", icon="⚖️")
+bbca_page = st.Page("pages/bbca_matrix.py", title="BBCA (Free)", icon="🏦")
 
 # 🔴 Premium / Gated Pages (We will lock these later, but group them visually now)
 btc_page = st.Page("pages/btc_macro.py", title="Bitcoin", icon="📈")
