@@ -44,8 +44,8 @@ def fetch_custom_data():
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
     df_adro['RSI'] = 100 - (100 / (1 + (gain / loss)))
     
-    exp1 = df_adro['Close'].ewm(span=12, adjust=False).mean()
-    exp2 = df_adro['Close'].ewm(span=26, adjust=False).mean()
+    exp1 = df_adro['Close'].ewm(span=13, adjust=False).mean()
+    exp2 = df_adro['Close'].ewm(span=21, adjust=False).mean()
     df_adro['MACD'] = exp1 - exp2
     df_adro['Signal_Line'] = df_adro['MACD'].ewm(span=9, adjust=False).mean()
     df_adro['MACD_Hist'] = df_adro['MACD'] - df_adro['Signal_Line']
