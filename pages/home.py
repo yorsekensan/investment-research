@@ -15,11 +15,13 @@ st.title("⚡ YS Investment Research Terminal")
 st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
 st.divider()
 
-# --- 1. BULK DATA FETCHING FOR ALL 4 ASSETS & MACRO DRIVERS ---
+# --- 1. BULK DATA FETCHING & CALENDAR CLEANING ---
 @st.cache_data(ttl=3600)
 def fetch_command_center_data():
     tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
     data = yf.download(tickers, period="1y", progress=False)['Close']
+    # CRITICAL: Forward-fill missing values across different timezones/calendars
+    data = data.ffill().bfill()
     return data
 
 try:
@@ -28,9 +30,9 @@ except Exception as e:
     st.error("Failed to fetch live macro data. Yahoo Finance might be rate-limiting.")
     st.stop()
 
-# Helper engine to calculate 6-indicator score
+# Helper engine to calculate 6-indicator score consistently
 def calculate_asset_score(asset_ticker, data, asset_type):
-    df = pd.DataFrame(data[asset_ticker].dropna())
+    df = pd.DataFrame(data[asset_ticker]).dropna()
     df.columns = ['Close']
     
     df['SMA_50'] = df['Close'].rolling(50).mean()
@@ -47,7 +49,6 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['MACD'] = exp1 - exp2
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
-    df = df.dropna()
     cur = df.iloc[-1]
     
     # Base 4 technical indicators
@@ -60,19 +61,28 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     # Custom 2 macro indicators depending on asset type
     if asset_type == "btc":
         if data['DX-Y.NYB'].iloc[-1] < data['DX-Y.NYB'].rolling(50).mean().iloc[-1]: buys += 1
-        if (data['BTC-USD'].iloc[-1] - data['BTC-USD'].iloc[-20])/data['BTC-USD'].iloc[-20] > (data['^GSPC'].iloc[-1] - data['^GSPC'].iloc[-20])/data['^GSPC'].iloc[-20]: buys += 1
+        btc_20d = (data['BTC-USD'].iloc[-1] - data['BTC-USD'].iloc[-20]) / data['BTC-USD'].iloc[-20]
+        spx_20d = (data['^GSPC'].iloc[-1] - data['^GSPC'].iloc[-20]) / data['^GSPC'].iloc[-20]
+        if btc_20d > spx_20d: buys += 1
         price_str = f"${cur['Close']:,.2f}"
+
     elif asset_type == "gold":
         if data['DX-Y.NYB'].iloc[-1] < data['DX-Y.NYB'].rolling(50).mean().iloc[-1]: buys += 1
         if data['^TNX'].iloc[-1] < data['^TNX'].rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"${cur['Close']:,.2f}"
+
     elif asset_type == "bbca":
-        if (data['BBCA.JK'].iloc[-1] - data['BBCA.JK'].iloc[-20])/data['BBCA.JK'].iloc[-20] > (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20])/data['^JKSE'].iloc[-20]: buys += 1
+        bbca_20d = (data['BBCA.JK'].iloc[-1] - data['BBCA.JK'].iloc[-20]) / data['BBCA.JK'].iloc[-20]
+        ihsg_20d = (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20]) / data['^JKSE'].iloc[-20]
+        if bbca_20d > ihsg_20d: buys += 1
         if data['^TNX'].iloc[-1] < data['^TNX'].rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
+
     elif asset_type == "adro":
         if data['IDR=X'].iloc[-1] > data['IDR=X'].rolling(50).mean().iloc[-1]: buys += 1
-        if (data['ADRO.JK'].iloc[-1] - data['ADRO.JK'].iloc[-20])/data['ADRO.JK'].iloc[-20] > (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20])/data['^JKSE'].iloc[-20]: buys += 1
+        adro_20d = (data['ADRO.JK'].iloc[-1] - data['ADRO.JK'].iloc[-20]) / data['ADRO.JK'].iloc[-20]
+        ihsg_20d = (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20]) / data['^JKSE'].iloc[-20]
+        if adro_20d > ihsg_20d: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
         
     # Determine Regime Status
@@ -110,7 +120,6 @@ df_summary = pd.DataFrame(summary_rows)
 st.subheader("🌐 Global Macro Pulse & Asset Summary")
 st.write("Live algorithmic evaluation across all tracked asset classes based on the unified 6-indicator quantitative matrix.")
 
-# Display clean table
 st.dataframe(
     df_summary, 
     use_container_width=True, 
@@ -119,7 +128,6 @@ st.dataframe(
 
 st.divider()
 
-# Quick Navigation helper cards
 st.subheader("📁 Select Asset Terminal")
 col1, col2, col3, col4 = st.columns(4)
 
@@ -141,7 +149,6 @@ with col4:
 
 st.write("")
 
-# Support / Donate Banner
 st.markdown("""
 <div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
     <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
