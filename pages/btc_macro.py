@@ -146,7 +146,31 @@ col4.metric("% vs 200 DMA", f"{latest['pct_vs_200ma']:+.2f}%")
 col5.metric("RSI (14)", f"{latest['RSI14']:.1f}")
 col6.metric("OBV vs 50MA", obv_status)
 
-st.divider()
+st.divider()# --- ALGORITHMIC VERDICT (GATED) ---
+st.subheader("🤖 Algorithmic Verdict")
+st.write("Our quantitative engine has evaluated all active macro indicators for this asset.")
+
+# Toggle this to True to see what paid users see, False for free users
+is_premium = False 
+
+if is_premium:
+    # 🟢 WHAT PAID USERS SEE: The Unlocked Signal 
+    if buy_count >= 4:
+        st.success(f"🟢 **MACRO BUY ZONE** — Indicator Consensus: {buy_count} Buy Signals Aligned")
+    elif sell_count >= 4:
+        st.error(f"🔴 **MACRO SELL ZONE** — Indicator Consensus: {sell_count} Sell Signals Aligned")
+    else:
+        st.info(f"⚪ **NEUTRAL REGIME** — Consensus Mixed ({buy_count} Buy / {sell_count} Sell). Wait for alignment.")
+else:
+    # 🔒 WHAT FREE USERS SEE: The Paywall Box
+    st.markdown("""
+    <div style='background-color: #1E2127; padding: 30px; border-radius: 10px; border: 1px solid #444; text-align: center;'>
+        <h2 style='color: #888; margin-bottom: 5px;'>🔒 PREMIUM MACRO SIGNAL</h2>
+        <p style='color: #AAA; font-size: 16px;'>Indicator Consensus: <b>[ LOCKED ]</b></p>
+        <p style='color: #AAA; font-size: 16px; margin-bottom: 20px;'>Current Regime: <b>[ LOCKED ]</b></p>
+        <a href="#" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 12px 24px; border-radius: 5px; font-weight: bold; font-size: 16px;'>Upgrade to Unlock Signal ➔</a>
+    </div>
+    """, unsafe_allow_html=True)
 
 st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell)")
 if verdict == "AGGRESSIVE BUY ZONE":
