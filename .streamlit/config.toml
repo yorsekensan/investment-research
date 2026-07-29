@@ -1,0 +1,17 @@
+[theme]
+# The main accent color (we'll use an institutional Gold/Orange)
+primaryColor = "#E5A937" 
+
+# Background colors (Dark Slate / Terminal vibe)
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1E2127"
+
+# Text color
+textColor = "#FAFAFA"
+
+# Font (sans serif looks the most modern for SaaS)
+font = "sans serif"
+
+[client]
+# Removes the default Streamlit hamburger menu in the top right to make it feel like a custom app
+toolbarMode = "minimal"
