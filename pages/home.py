@@ -2,12 +2,16 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-st.set_page_config(page_title="Market Dashboard", layout="wide")
+st.set_page_config(page_title="YS Research | Command Center", layout="wide")
 
-st.title("Market Intelligence Dashboard")
-st.caption("Quantitative regime monitoring.")
+# --- HERO SECTION (VALUE PROPOSITION) ---
+st.markdown("<h1 style='text-align: center;'>YS Investment Research</h1>", unsafe_allow_html=True)
+st.markdown("<h4 style='text-align: center; color: #888888;'>Emotionless, Algorithmic Clarity in Chaotic Markets.</h4>", unsafe_allow_html=True)
+st.write("") # spacing
+st.info("**Welcome.** Our quantitative engine monitors global liquidity, momentum, and volume flow to dictate macro asset allocation. Do not guess the market regime. Let the math dictate the exposure.")
+st.divider()
 
-# --- LIVE PRICE FETCHING ENGINE ---
+# --- LIVE MARKET TICKER ---
 @st.cache_data(ttl=60)
 def get_live_price(ticker):
     try:
@@ -21,67 +25,44 @@ def get_live_price(ticker):
     return None
 
 btc_price = get_live_price("BTC-USD")
+gold_price = get_live_price("GC=F")
 bbca_price = get_live_price("BBCA.JK")
-adro_price = get_live_price("ADRO.JK")
-gold_price = get_live_price("GC=F") # Added Gold Pricing
 
-# ==========================================
-# 🟢 CRYPTO ECOSYSTEM SECTION
-# ==========================================
-st.divider()
+st.subheader("📡 Live Market Monitor")
+col1, col2, col3 = st.columns(3)
 
-col1, col2, col3 = st.columns([1, 8, 3])
 with col1:
-    st.image("https://cryptologos.cc/logos/bitcoin-btc-logo.png", width=40)
+    st.metric(label="Bitcoin (BTC/USD)", value=f"${btc_price:,.2f}" if btc_price else "Offline")
 with col2:
-    st.subheader("Crypto Assets")
+    st.metric(label="Gold (GC=F)", value=f"${gold_price:,.2f}" if gold_price else "Offline")
 with col3:
-    if btc_price:
-        st.metric(label="Live BTC/USD", value=f"${btc_price:,.2f}")
-    else:
-        st.metric(label="Live BTC/USD", value="Data Offline")
+    st.metric(label="Bank Central Asia (BBCA)", value=f"Rp{bbca_price:,.0f}" if bbca_price else "Offline")
 
-st.page_link("pages/btc_macro.py", label="Bitcoin (BTC) Macro Regime", icon="📈")
-
-# ==========================================
-# 🟡 COMMODITIES SECTION
-# ==========================================
 st.divider()
 
-col7, col8, col9 = st.columns([1, 8, 3])
-with col7:
-    # General gold/commodity icon
-    st.image("https://cdn-icons-png.flaticon.com/512/3665/3665961.png", width=40)
-with col8:
-    st.subheader("Commodities")
-with col9:
-    if gold_price:
-        st.metric(label="Gold (GC=F)", value=f"${gold_price:,.2f}")
-    else:
-        st.metric(label="Gold (GC=F)", value="Data Offline")
+# --- CALL TO ACTION (THE FUNNEL) ---
+st.subheader("⚖️ Start Here: Design Your Portfolio")
+st.write("Before diving into individual asset matrices, determine your baseline macro allocation. Use our proprietary algorithmic allocator to generate your custom risk-adjusted portfolio.")
 
-st.page_link("pages/gold_macro.py", label="Gold (GC=F) Macro Matrix", icon="🪙")
+if st.button("Launch Portfolio Allocator ➔", use_container_width=True, type="primary"):
+    st.switch_page("pages/portofolio_allocator.py")
 
-# ==========================================
-# 🔵 IDX EQUITIES SECTION
-# ==========================================
-st.divider()
+st.write("")
+st.write("")
 
-col4, col5, col6 = st.columns([1, 8, 3])
+# --- ASSET DISCOVERY ---
+st.subheader("🔍 Explore Quantitative Matrices")
+col4, col5 = st.columns(2)
+
 with col4:
-    st.image("https://cdn-icons-png.flaticon.com/512/2422/2422323.png", width=40)
-with col5:
-    st.subheader("IDX Equities")
-with col6:
-    if bbca_price:
-        st.metric(label="BBCA", value=f"Rp{bbca_price:,.0f}")
-    else:
-        st.metric(label="BBCA", value="Data Offline")
-        
-    if adro_price:
-        st.metric(label="ADRO", value=f"Rp{adro_price:,.0f}")
-    else:
-        st.metric(label="ADRO", value="Data Offline")
+    st.markdown("### Public Matrices")
+    st.write("Test our underlying logic on structural blue-chip equities.")
+    if st.button("View BBCA Matrix (Free)"):
+         st.switch_page("pages/bbca_matrix.py")
 
-st.page_link("pages/bbca_matrix.py", label="Bank Central Asia (BBCA.JK) Equity Matrix", icon="🏦")
-st.page_link("pages/adro_matrix.py", label="Adaro Energy (ADRO.JK) Cyclical Matrix", icon="⛏️")
+with col5:
+    st.markdown("### Premium Matrices")
+    st.write("Unlock high-beta crypto and safe-haven macro indicators.")
+    st.page_link("pages/btc_macro.py", label="View Bitcoin", icon="🔒")
+    st.page_link("pages/gold_macro.py", label="View Gold", icon="🔒")
+    st.page_link("pages/adro_matrix.py", label="View ADRO", icon="🔒")
