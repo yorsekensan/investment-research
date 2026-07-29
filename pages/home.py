@@ -2,68 +2,149 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-st.set_page_config(page_title="YS Research | Command Center", layout="wide")
+# ==========================================
+# ⚙️ COMMAND CENTER CONFIGURATION
+# ==========================================
+st.set_page_config(
+    page_title="YS Investment Research | Command Center", 
+    page_icon="⚡", 
+    layout="wide"
+)
 
-# --- HERO SECTION (VALUE PROPOSITION) ---
-st.markdown("<h1 style='text-align: center;'>YS Investment Research</h1>", unsafe_allow_html=True)
-st.markdown("<h4 style='text-align: center; color: #888888;'>Emotionless, Algorithmic Clarity in Chaotic Markets.</h4>", unsafe_allow_html=True)
-st.write("") # spacing
-st.info("**Welcome.** Our quantitative engine monitors global liquidity, momentum, and volume flow to dictate macro asset allocation. Do not guess the market regime. Let the math dictate the exposure.")
+st.title("⚡ YS Investment Research Terminal")
+st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
 st.divider()
 
-# --- LIVE MARKET TICKER ---
-@st.cache_data(ttl=60)
-def get_live_price(ticker):
-    try:
-        df = yf.download(ticker, period="1d", interval="1m", progress=False)
-        if not df.empty:
-            if isinstance(df.columns, pd.MultiIndex):
-                return float(df['Close'].iloc[-1].values[0])
-            return float(df['Close'].iloc[-1])
-    except Exception:
-        pass
-    return None
+# --- 1. BULK DATA FETCHING FOR ALL 4 ASSETS & MACRO DRIVERS ---
+@st.cache_data(ttl=3600)
+def fetch_command_center_data():
+    tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
+    data = yf.download(tickers, period="1y", progress=False)['Close']
+    return data
 
-btc_price = get_live_price("BTC-USD")
-gold_price = get_live_price("GC=F")
-bbca_price = get_live_price("BBCA.JK")
+try:
+    data = fetch_command_center_data()
+except Exception as e:
+    st.error("Failed to fetch live macro data. Yahoo Finance might be rate-limiting.")
+    st.stop()
 
-st.subheader("📡 Live Market Monitor")
-col1, col2, col3 = st.columns(3)
+# Helper engine to calculate 6-indicator score
+def calculate_asset_score(asset_ticker, data, asset_type):
+    df = pd.DataFrame(data[asset_ticker].dropna())
+    df.columns = ['Close']
+    
+    df['SMA_50'] = df['Close'].rolling(50).mean()
+    df['SMA_200'] = df['Close'].rolling(200).mean()
+    
+    delta = df['Close'].diff()
+    gain = (delta.where(delta > 0, 0)).rolling(14).mean()
+    loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
+    df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+    
+    # Fast MACD (13, 21)
+    exp1 = df['Close'].ewm(span=13, adjust=False).mean()
+    exp2 = df['Close'].ewm(span=21, adjust=False).mean()
+    df['MACD'] = exp1 - exp2
+    df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
+    
+    df = df.dropna()
+    cur = df.iloc[-1]
+    
+    # Base 4 technical indicators
+    buys = 0
+    if cur['Close'] > cur['SMA_200']: buys += 1
+    if cur['Close'] > cur['SMA_50']: buys += 1
+    if cur['RSI'] < 40: buys += 1
+    if cur['MACD'] > cur['Signal']: buys += 1
+    
+    # Custom 2 macro indicators depending on asset type
+    if asset_type == "btc":
+        if data['DX-Y.NYB'].iloc[-1] < data['DX-Y.NYB'].rolling(50).mean().iloc[-1]: buys += 1
+        if (data['BTC-USD'].iloc[-1] - data['BTC-USD'].iloc[-20])/data['BTC-USD'].iloc[-20] > (data['^GSPC'].iloc[-1] - data['^GSPC'].iloc[-20])/data['^GSPC'].iloc[-20]: buys += 1
+        price_str = f"${cur['Close']:,.2f}"
+    elif asset_type == "gold":
+        if data['DX-Y.NYB'].iloc[-1] < data['DX-Y.NYB'].rolling(50).mean().iloc[-1]: buys += 1
+        if data['^TNX'].iloc[-1] < data['^TNX'].rolling(50).mean().iloc[-1]: buys += 1
+        price_str = f"${cur['Close']:,.2f}"
+    elif asset_type == "bbca":
+        if (data['BBCA.JK'].iloc[-1] - data['BBCA.JK'].iloc[-20])/data['BBCA.JK'].iloc[-20] > (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20])/data['^JKSE'].iloc[-20]: buys += 1
+        if data['^TNX'].iloc[-1] < data['^TNX'].rolling(50).mean().iloc[-1]: buys += 1
+        price_str = f"Rp {cur['Close']:,.0f}"
+    elif asset_type == "adro":
+        if data['IDR=X'].iloc[-1] > data['IDR=X'].rolling(50).mean().iloc[-1]: buys += 1
+        if (data['ADRO.JK'].iloc[-1] - data['ADRO.JK'].iloc[-20])/data['ADRO.JK'].iloc[-20] > (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20])/data['^JKSE'].iloc[-20]: buys += 1
+        price_str = f"Rp {cur['Close']:,.0f}"
+        
+    # Determine Regime Status
+    if buys >= 4:
+        regime = "🟢 Macro Buy Zone"
+    elif buys <= 2:
+        regime = "🔴 Macro Sell Zone"
+    else:
+        regime = "⚪ Neutral Regime"
+        
+    return price_str, f"{buys} / 6 Buy", regime
+
+# --- 2. COMPILE COMMAND CENTER SUMMARY TABLE ---
+assets_meta = [
+    {"name": "BBCA (Structural Equity)", "ticker": "BBCA.JK", "type": "bbca", "sector": "Financials / Banking"},
+    {"name": "ADRO (Cyclical Energy)", "ticker": "ADRO.JK", "type": "adro", "sector": "Energy / Commodities"},
+    {"name": "Bitcoin (BTC)", "ticker": "BTC-USD", "type": "btc", "sector": "High-Beta Crypto"},
+    {"name": "Gold (Safe Haven)", "ticker": "GC=F", "type": "gold", "sector": "Precious Metals"}
+]
+
+summary_rows = []
+for item in assets_meta:
+    price, score, regime = calculate_asset_score(item["ticker"], data, item["type"])
+    summary_rows.append({
+        "Asset Matrix": item["name"],
+        "Sector": item["sector"],
+        "Current Price": price,
+        "Macro Consensus": score,
+        "Regime Status": regime
+    })
+
+df_summary = pd.DataFrame(summary_rows)
+
+# --- 3. RENDER UI LAYOUT ---
+st.subheader("🌐 Global Macro Pulse & Asset Summary")
+st.write("Live algorithmic evaluation across all tracked asset classes based on the unified 6-indicator quantitative matrix.")
+
+# Display clean table
+st.dataframe(
+    df_summary, 
+    use_container_width=True, 
+    hide_index=True
+)
+
+st.divider()
+
+# Quick Navigation helper cards
+st.subheader("📁 Select Asset Terminal")
+col1, col2, col3, col4 = st.columns(4)
 
 with col1:
-    st.metric(label="Bitcoin (BTC/USD)", value=f"${btc_price:,.2f}" if btc_price else "Offline")
+    st.markdown("### 🏦 BBCA")
+    st.write("Private structural compounder & banking leader.")
+    
 with col2:
-    st.metric(label="Gold (GC=F)", value=f"${gold_price:,.2f}" if gold_price else "Offline")
+    st.markdown("### ⛏️ ADRO")
+    st.write("Cyclical coal exporter & currency tailwinds.")
+    
 with col3:
-    st.metric(label="Bank Central Asia (BBCA)", value=f"Rp{bbca_price:,.0f}" if bbca_price else "Offline")
-
-st.divider()
-
-# --- CALL TO ACTION (THE FUNNEL) ---
-st.subheader("⚖️ Start Here: Design Your Portfolio")
-st.write("Before diving into individual asset matrices, determine your baseline macro allocation. Use our proprietary algorithmic allocator to generate your custom risk-adjusted portfolio.")
-
-if st.button("Launch Portfolio Allocator ➔", use_container_width=True, type="primary"):
-    st.switch_page("pages/portofolio_allocator.py")
-
-st.write("")
-st.write("")
-
-# --- ASSET DISCOVERY ---
-st.write("")
-st.write("")
-st.subheader("🔍 Explore Quantitative Matrices")
-st.write("Access our live algorithmic models for equities, crypto, and commodities. All research is open and transparent.")
-
-col4, col5 = st.columns(2)
-
+    st.markdown("### 📈 Bitcoin")
+    st.write("Global liquidity & high-beta risk tracking.")
+    
 with col4:
-    st.markdown("### Equities")
-    st.page_link("pages/bbca_matrix.py", label="BBCA (Structural Blue-Chip)", icon="🏦")
-    st.page_link("pages/adro_matrix.py", label="ADRO (Cyclical Equity)", icon="⛏️")
+    st.markdown("### 🪙 Gold")
+    st.write("Safe-haven store of value & yield opportunity cost.")
 
-with col5:
-    st.markdown("### Macro & Crypto")
-    st.page_link("pages/btc_macro.py", label="Bitcoin (High Beta)", icon="📈")
-    st.page_link("pages/gold_macro.py", label="Gold (Safe Haven)", icon="🪙")
+st.write("")
+
+# Support / Donate Banner
+st.markdown("""
+<div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
+    <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
+    <a href="https://trakteer.id/yourname" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
+</div>
+""", unsafe_allow_html=True)
