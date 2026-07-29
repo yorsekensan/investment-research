@@ -3,6 +3,8 @@ import pandas as pd
 import plotly.express as px
 from io import BytesIO
 import datetime
+from fpdf import FPDF
+import matplotlib.pyplot as plt
 
 st.set_page_config(page_title="Portfolio Allocator", layout="wide")
 
