@@ -4,3 +4,6 @@ numpy
 requests
 plotly
 yfinance
+xlsxwriter
+fpdf2
+matplotlib
