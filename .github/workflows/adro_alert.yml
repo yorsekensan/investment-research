@@ -2,30 +2,28 @@ name: ADRO Alert Engine
 
 on:
   schedule:
-    # Runs hourly Monday - Friday during IDX trading hours (02:00 UTC - 09:00 UTC / 09:00 WIB - 16:00 WIB)
-    - cron: '0 2-9 * * 1-5'
-  workflow_dispatch: # Enables manual run button in Actions tab
+    # Runs Mon-Fri at 02:00 UTC (09:00 WIB) and 09:00 UTC (16:00 WIB)
+    - cron: '0 2,9 * * 1-5'
+  workflow_dispatch:
 
 jobs:
-  run-alert-engine:
+  check-adro:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install yfinance pandas requests
+      - name: Install dependencies
+        run: pip install requests yfinance pandas
 
-      - name: Execute ADRO Engine
+      - name: Run ADRO Engine
         env:
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        # Make sure this matches your actual python file name!
         run: python adro_engine.py
