@@ -1,42 +1,18 @@
-import os
-import requests
 import yfinance as yf
 import pandas as pd
 
-# Environment variables from GitHub Secrets
-BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+from common import send_telegram_msg, notify_failure, get_yf_session, compute_rsi, compute_bollinger_pctb, flatten_yf_columns
 
-def send_telegram_alert(message):
-    if not BOT_TOKEN or not CHAT_ID:
-        print("❌ Telegram credentials missing.")
-        return
-    
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": CHAT_ID,
-        "text": message,
-        "parse_mode": "Markdown"
-    }
-    response = requests.post(url, json=payload)
-    if response.status_code == 200:
-        print("✅ Alert sent successfully.")
-    else:
-        print(f"❌ Failed to send alert: {response.text}")
 
 def run_adro_engine():
     print("🔍 Fetching market data for ADRO.JK and USD/IDR...")
+    session = get_yf_session()
     try:
-        df = yf.download("ADRO.JK", period="2y", progress=False)
-        fx_df = yf.download("IDR=X", period="1y", progress=False)
-
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = df.columns.droplevel(1)
-        if isinstance(fx_df.columns, pd.MultiIndex):
-            fx_df.columns = fx_df.columns.droplevel(1)
-            
+        df = flatten_yf_columns(yf.download("ADRO.JK", period="2y", progress=False, session=session))
+        fx_df = flatten_yf_columns(yf.download("IDR=X", period="1y", progress=False, session=session))
     except Exception as e:
         print(f"❌ Error fetching data: {e}")
+        notify_failure("ADRO", e)
         return
 
     clean_df = df.dropna()
@@ -44,24 +20,15 @@ def run_adro_engine():
 
     if clean_df.empty or clean_fx.empty:
         print("⚠️ Incomplete dataset. Exiting run.")
+        notify_failure("ADRO", Exception("Empty dataset from yfinance (ADRO.JK or IDR=X)"))
         return
 
     # --- INDICATOR CALCULATIONS ---
     clean_df["MA50"] = clean_df["Close"].rolling(50).mean()
     clean_df["MA200"] = clean_df["Close"].rolling(200).mean()
     clean_df["pct_vs_200ma"] = (clean_df["Close"] / clean_df["MA200"] - 1) * 100
-
-    delta = clean_df["Close"].diff()
-    gain = delta.clip(lower=0).rolling(14).mean()
-    loss = (-delta.clip(upper=0)).rolling(14).mean()
-    rs = gain / loss
-    clean_df["RSI14"] = 100 - (100 / (1 + rs))
-
-    ma20 = clean_df["Close"].rolling(20).mean()
-    std20 = clean_df["Close"].rolling(20).std()
-    clean_df["Upper_BB"] = ma20 + (2 * std20)
-    clean_df["Lower_BB"] = ma20 - (2 * std20)
-    clean_df["BB_pctB"] = (clean_df["Close"] - clean_df["Lower_BB"]) / (clean_df["Upper_BB"] - clean_df["Lower_BB"])
+    clean_df["RSI14"] = compute_rsi(clean_df["Close"])
+    clean_df["BB_pctB"] = compute_bollinger_pctb(clean_df["Close"])
 
     clean_fx["MA50"] = clean_fx["Close"].rolling(50).mean()
 
@@ -112,7 +79,6 @@ def run_adro_engine():
         print(f"⚪ Market state is NEUTRAL ({buy_count} Buy / {sell_count} Sell). No Telegram alert pushed.")
         return
 
-    # Construct Message
     message = (
         f"🚨 *ADRO MARKET REGIME ALERT* 🚨\n\n"
         f"*Verdict:* {verdict}\n"
@@ -122,7 +88,8 @@ def run_adro_engine():
         f"_{alert_body}_"
     )
 
-    send_telegram_alert(message)
+    send_telegram_msg(message)
+
 
 if __name__ == "__main__":
     run_adro_engine()
