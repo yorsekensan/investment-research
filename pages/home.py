@@ -15,14 +15,12 @@ st.title("⚡ YS Investment Research Terminal")
 st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
 st.divider()
 
-# --- 1. BULK DATA FETCHING & CALENDAR CLEANING ---
+# --- 1. BULK DATA FETCHING (MATCHING MATRIX PAGES WITH period="max") ---
 @st.cache_data(ttl=3600)
 def fetch_command_center_data():
     tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
-    # Fetch 2y period to guarantee 200+ trading days for SMA_200
-    df_raw = yf.download(tickers, period="2y", progress=False)
+    df_raw = yf.download(tickers, period="max", progress=False)
     
-    # Cleanly extract Close prices regardless of yfinance MultiIndex version
     if isinstance(df_raw.columns, pd.MultiIndex):
         if 'Close' in df_raw.columns.levels[0]:
             data = df_raw['Close']
@@ -31,8 +29,6 @@ def fetch_command_center_data():
     else:
         data = df_raw
         
-    # Forward-fill and back-fill missing calendar/timezone gaps
-    data = data.ffill().bfill()
     return data
 
 try:
@@ -41,15 +37,17 @@ except Exception as e:
     st.error(f"Failed to fetch live macro data: {e}")
     st.stop()
 
-# Helper engine to calculate 6-indicator score consistently
+# Helper engine to cleanly process each asset independently
 def calculate_asset_score(asset_ticker, data, asset_type):
     if asset_ticker not in data.columns:
         return "N/A", "0 / 6 Buy", "⚪ Data Error"
         
-    df = pd.DataFrame(data[asset_ticker].dropna())
+    # Extract clean individual ticker series (no calendar padding)
+    s_asset = data[asset_ticker].dropna()
+    df = pd.DataFrame(s_asset)
     df.columns = ['Close']
     
-    # Calculate indicators
+    # Calculate Core Technical Indicators
     df['SMA_50'] = df['Close'].rolling(50).mean()
     df['SMA_200'] = df['Close'].rolling(200).mean()
     
@@ -64,49 +62,46 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['MACD'] = exp1 - exp2
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
-    # Safe extraction of latest valid row
-    df_clean = df.dropna()
-    if df_clean.empty:
-        cur = df.iloc[-1]
-    else:
-        cur = df_clean.iloc[-1]
+    cur = df.iloc[-1]
     
     # Base 4 technical indicators
     buys = 0
-    if pd.notna(cur.get('SMA_200')) and cur['Close'] > cur['SMA_200']: buys += 1
-    if pd.notna(cur.get('SMA_50')) and cur['Close'] > cur['SMA_50']: buys += 1
-    if pd.notna(cur.get('RSI')) and cur['RSI'] < 40: buys += 1
-    if pd.notna(cur.get('MACD')) and pd.notna(cur.get('Signal')) and cur['MACD'] > cur['Signal']: buys += 1
+    if cur['Close'] > cur['SMA_200']: buys += 1
+    if cur['Close'] > cur['SMA_50']: buys += 1
+    if cur['RSI'] < 40: buys += 1
+    if cur['MACD'] > cur['Signal']: buys += 1
     
-    # Custom 2 macro indicators depending on asset type
+    # Clean macro helpers (isolated per ticker)
+    s_dxy = data['DX-Y.NYB'].dropna()
+    s_tnx = data['^TNX'].dropna()
+    s_ihsg = data['^JKSE'].dropna()
+    s_spx = data['^GSPC'].dropna()
+    s_idr = data['IDR=X'].dropna()
+    
+    # Custom 2 macro indicators per asset type
     if asset_type == "btc":
-        dxy_sma50 = data['DX-Y.NYB'].rolling(50).mean().iloc[-1]
-        if data['DX-Y.NYB'].iloc[-1] < dxy_sma50: buys += 1
-        btc_20d = (data['BTC-USD'].iloc[-1] - data['BTC-USD'].iloc[-20]) / data['BTC-USD'].iloc[-20]
-        spx_20d = (data['^GSPC'].iloc[-1] - data['^GSPC'].iloc[-20]) / data['^GSPC'].iloc[-20]
+        if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
+        btc_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+        spx_20d = (s_spx.iloc[-1] - s_spx.iloc[-20]) / s_spx.iloc[-20]
         if btc_20d > spx_20d: buys += 1
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "gold":
-        dxy_sma50 = data['DX-Y.NYB'].rolling(50).mean().iloc[-1]
-        tnx_sma50 = data['^TNX'].rolling(50).mean().iloc[-1]
-        if data['DX-Y.NYB'].iloc[-1] < dxy_sma50: buys += 1
-        if data['^TNX'].iloc[-1] < tnx_sma50: buys += 1
+        if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
+        if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "bbca":
-        bbca_20d = (data['BBCA.JK'].iloc[-1] - data['BBCA.JK'].iloc[-20]) / data['BBCA.JK'].iloc[-20]
-        ihsg_20d = (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20]) / data['^JKSE'].iloc[-20]
-        tnx_sma50 = data['^TNX'].rolling(50).mean().iloc[-1]
+        bbca_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+        ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
         if bbca_20d > ihsg_20d: buys += 1
-        if data['^TNX'].iloc[-1] < tnx_sma50: buys += 1
+        if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
 
     elif asset_type == "adro":
-        idr_sma50 = data['IDR=X'].rolling(50).mean().iloc[-1]
-        if data['IDR=X'].iloc[-1] > idr_sma50: buys += 1
-        adro_20d = (data['ADRO.JK'].iloc[-1] - data['ADRO.JK'].iloc[-20]) / data['ADRO.JK'].iloc[-20]
-        ihsg_20d = (data['^JKSE'].iloc[-1] - data['^JKSE'].iloc[-20]) / data['^JKSE'].iloc[-20]
+        if s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]: buys += 1
+        adro_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+        ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
         if adro_20d > ihsg_20d: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
         
