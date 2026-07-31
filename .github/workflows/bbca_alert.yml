@@ -1,13 +1,13 @@
-name: BTC Alert Engine
+name: BBCA Alert Engine
 
 on:
   schedule:
-    # Runs every 3 hours (00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC)
-    - cron: '0 */3 * * *'
+    # Runs Mon-Fri at 02:00 UTC (09:00 WIB) and 09:00 UTC (16:00 WIB)
+    - cron: '0 2,9 * * 1-5'
   workflow_dispatch:
 
 jobs:
-  check-btc:
+  check-bbca:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -19,10 +19,10 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install requests pandas numpy
+        run: pip install requests yfinance pandas numpy
 
-      - name: Run BTC Engine
+      - name: Run BBCA Engine
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        run: python btc_engine.py
+        run: python bbca_engine.py
