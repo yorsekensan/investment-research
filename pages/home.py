@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+from disclaimer import render_disclaimer
 
 # ==========================================
 # ⚙️ COMMAND CENTER CONFIGURATION
@@ -13,6 +14,7 @@ st.set_page_config(
 
 st.title("⚡ YS Investment Research Terminal")
 st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
+render_disclaimer()
 st.divider()
 
 # --- 1. BULK DATA FETCHING (MATCHING MATRIX PAGES WITH period="max") ---
