@@ -3,7 +3,7 @@ name: BBCA Alert Engine
 on:
   schedule:
     # Runs Mon-Fri at 02:00 UTC (09:00 WIB) and 09:00 UTC (16:00 WIB)
-    - cron: '0 2-9 * * 1-5'
+    - cron: '0 2,9 * * 1-5'
   workflow_dispatch:
 
 jobs:
@@ -19,10 +19,10 @@ jobs:
           python-version: '3.10'
 
       - name: Install dependencies
-        run: pip install requests yfinance pandas
+        run: pip install requests yfinance pandas numpy
 
       - name: Run BBCA Engine
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python bbca_engine.py
