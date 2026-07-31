@@ -6,10 +6,10 @@ import plotly.graph_objects as go
 # ==========================================
 # ⚙️ ASSET CONFIGURATION
 # ==========================================
-PAGE_TITLE = "Gold (Safe Haven)"
-PAGE_ICON = "🪙"
-TICKER = "GC=F"
-DESCRIPTION = "Live quantitative tracking of safe-haven commodities. Includes Global USD (DXY) and US 10Y Yield Macro Dynamics."
+PAGE_TITLE = "BBCA (Structural Equity)"
+PAGE_ICON = "🏦"
+TICKER = "BBCA.JK"
+DESCRIPTION = "Live quantitative tracking of structural blue-chip banking. Includes IHSG Relative Leadership and US 10Y Yield Macro Dynamics."
 
 st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layout="wide")
 
@@ -17,48 +17,50 @@ st.title(f"{PAGE_ICON} {PAGE_TITLE} Macro Matrix")
 st.write(DESCRIPTION)
 st.divider()
 
-# --- 1. DATA FETCHING (Gold, DXY, US10Y) ---
+# --- 1. DATA FETCHING (BBCA, IHSG, US10Y) ---
 @st.cache_data(ttl=3600)
 def fetch_custom_data():
-    df_gold = yf.download(TICKER, period="max", progress=False)
-    if isinstance(df_gold.columns, pd.MultiIndex):
-        df_gold.columns = df_gold.columns.droplevel(1)
+    # CHANGED: Fetch 'max' period instead of '1y' to support 5Y and All-Time charts
+    df_bbca = yf.download(TICKER, period="max", progress=False)
+    if isinstance(df_bbca.columns, pd.MultiIndex):
+        df_bbca.columns = df_bbca.columns.droplevel(1)
         
-    df_dxy = yf.download("DX-Y.NYB", period="max", progress=False)
-    if isinstance(df_dxy.columns, pd.MultiIndex):
-        df_dxy.columns = df_dxy.columns.droplevel(1)
+    df_ihsg = yf.download("^JKSE", period="max", progress=False)
+    if isinstance(df_ihsg.columns, pd.MultiIndex):
+        df_ihsg.columns = df_ihsg.columns.droplevel(1)
         
     df_tnx = yf.download("^TNX", period="max", progress=False)
     if isinstance(df_tnx.columns, pd.MultiIndex):
         df_tnx.columns = df_tnx.columns.droplevel(1)
 
-    # 1. Gold Technical Indicators
-    df_gold['SMA_50'] = df_gold['Close'].rolling(window=50).mean()
-    df_gold['SMA_200'] = df_gold['Close'].rolling(window=200).mean()
+    # 1. BBCA Technical Indicators
+    df_bbca['SMA_50'] = df_bbca['Close'].rolling(window=50).mean()
+    df_bbca['SMA_200'] = df_bbca['Close'].rolling(window=200).mean()
     
     # RSI (14)
-    delta = df_gold['Close'].diff()
+    delta = df_bbca['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-    df_gold['RSI'] = 100 - (100 / (1 + (gain / loss)))
+    df_bbca['RSI'] = 100 - (100 / (1 + (gain / loss)))
     
-    # Fast MACD (13, 21 settings)
-    exp1 = df_gold['Close'].ewm(span=13, adjust=False).mean()
-    exp2 = df_gold['Close'].ewm(span=21, adjust=False).mean()
-    df_gold['MACD'] = exp1 - exp2
-    df_gold['Signal_Line'] = df_gold['MACD'].ewm(span=9, adjust=False).mean()
-    df_gold['MACD_Hist'] = df_gold['MACD'] - df_gold['Signal_Line']
+    # MACD (Custom 13, 21 settings)
+    exp1 = df_bbca['Close'].ewm(span=13, adjust=False).mean() 
+    exp2 = df_bbca['Close'].ewm(span=21, adjust=False).mean() 
+    df_bbca['MACD'] = exp1 - exp2
+    df_bbca['Signal_Line'] = df_bbca['MACD'].ewm(span=9, adjust=False).mean() 
+    df_bbca['MACD_Hist'] = df_bbca['MACD'] - df_bbca['Signal_Line'] 
     
-    # 2. DXY Indicator
-    df_dxy['SMA_50'] = df_dxy['Close'].rolling(window=50).mean()
-    
-    # 3. US 10Y Yield Indicator
+    # 2. US 10Y Yield Indicator
     df_tnx['SMA_50'] = df_tnx['Close'].rolling(window=50).mean()
+    
+    # 3. Relative Strength (20-Day Return vs IHSG)
+    bbca_20d = (df_bbca['Close'].iloc[-1] - df_bbca['Close'].iloc[-20]) / df_bbca['Close'].iloc[-20] * 100
+    ihsg_20d = (df_ihsg['Close'].iloc[-1] - df_ihsg['Close'].iloc[-20]) / df_ihsg['Close'].iloc[-20] * 100
 
-    return df_gold.dropna(), df_dxy.dropna(), df_tnx.dropna()
+    return df_bbca.dropna(), df_tnx.dropna(), bbca_20d, ihsg_20d
 
 try:
-    df, df_dxy, df_tnx = fetch_custom_data()
+    df, df_tnx, bbca_20d, ihsg_20d = fetch_custom_data()
 except Exception as e:
     st.error("Failed to fetch live macro data. Yahoo Finance might be rate-limiting.")
     st.stop()
@@ -67,8 +69,6 @@ current_price = float(df['Close'].iloc[-1])
 current_rsi = float(df['RSI'].iloc[-1])
 current_macd = float(df['MACD'].iloc[-1])
 current_signal = float(df['Signal_Line'].iloc[-1])
-current_dxy = float(df_dxy['Close'].iloc[-1])
-dxy_sma50 = float(df_dxy['SMA_50'].iloc[-1])
 current_tnx = float(df_tnx['Close'].iloc[-1])
 tnx_sma50 = float(df_tnx['SMA_50'].iloc[-1])
 
@@ -78,68 +78,65 @@ sell_count = 0
 neutral_count = 0
 indicators = []
 
+# Helper function to append to dictionary with "How to Read" column
 def add_indicator(metric, value, signal, explanation):
-    indicators.append({
-        "Metric": metric, 
-        "Current Value": value, 
-        "Signal": signal, 
-        "How to Read": explanation
-    })
+    indicators.append({"Metric": metric, "Current Value": value, "Signal": signal, "How to Read": explanation})
 
 # Ind 1: Price vs 200 SMA
 if current_price > df['SMA_200'].iloc[-1]:
     buy_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA confirms a structural precious metals bull market and central bank reserve accumulation.")
+    add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA indicates a structural macro uptrend and institutional accumulation.")
 else:
     sell_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA confirms a structural bear trend or extended macro consolidation.")
+    add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA indicates a structural macro downtrend and institutional distribution.")
 
 # Ind 2: Price vs 50 SMA
 if current_price > df['SMA_50'].iloc[-1]:
     buy_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA signals strong medium-term safe-haven demand and tactical momentum.")
+    add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA shows strong medium-term momentum and local support.")
 else:
     sell_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA signals medium-term trend deceleration and tactical profit-taking.")
+    add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA shows medium-term weakness and loss of momentum.")
 
 # Ind 3: RSI (14)
 if current_rsi < 40:
     buy_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 indicates heavily oversold conditions, offering a strong macro entry point.")
+    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 suggests the asset is oversold, presenting a high-probability dip-buying zone.")
 elif current_rsi > 70:
     sell_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 70 indicates overbought conditions prone to short-term mean reversion.")
+    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 70 suggests the asset is overbought and prone to short-term pullbacks/profit-taking.")
 else:
     neutral_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-70 indicates balanced safe-haven demand without momentum extremes.")
+    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-70 indicates normal price action without extreme momentum.")
 
-# Ind 4: Fast MACD (13, 21)
+# Ind 4: Custom Fast MACD (13, 21)
 if current_macd > current_signal:
     buy_count += 1
     add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish trend acceleration.")
 else:
     sell_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term momentum weakness.")
+    add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish trend acceleration.")
 
-# Ind 5: CUSTOM MACRO - Global USD Debasement (DXY vs 50 SMA)
-if current_dxy < dxy_sma50:
+# Ind 5: Market Leadership (BBCA vs IHSG 20d)
+if bbca_20d > ihsg_20d:
     buy_count += 1
-    add_indicator("USD Debasement (DXY < 50 SMA)", f"DXY at {current_dxy:.2f}", "🟢 Buy (Purchasing Power)", "A weak US Dollar boosts Gold's purchasing power appeal as a global non-fiat store of value.")
+    add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) > IHSG ({ihsg_20d:.1f}%)", "🟢 Buy (Inflow)", "Asset outperforming the benchmark index signals active institutional capital inflow.")
 else:
     sell_count += 1
-    add_indicator("USD Debasement (DXY > 50 SMA)", f"DXY at {current_dxy:.2f}", "🔴 Sell (USD Strength Headwind)", "A strong US Dollar creates a direct valuation headwind for fiat-priced precious metals.")
+    add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) < IHSG ({ihsg_20d:.1f}%)", "🔴 Sell (Outflow)", "Asset underperforming the index signals capital rotation or institutional distribution.")
 
-# Ind 6: CUSTOM MACRO - Opportunity Cost (US 10Y Yield vs 50 SMA)
+# Ind 6: Global Yield Tailwind (US 10Y Yield vs 50 SMA)
 if current_tnx < tnx_sma50:
     buy_count += 1
-    add_indicator("Opportunity Cost (US10Y < 50 SMA)", f"Yield at {current_tnx:.2f}%", "🟢 Buy (Lower Yield Drag)", "Easing bond yields reduce the opportunity cost of holding non-yielding safe-haven assets like Gold.")
+    add_indicator("Global Yields (US10Y < 50 SMA)", f"{current_tnx:.2f}%", "🟢 Buy (Tailwind)", "Falling US Treasury yields push global capital into emerging markets like Indonesia.")
 else:
     sell_count += 1
-    add_indicator("Opportunity Cost (US10Y > 50 SMA)", f"Yield at {current_tnx:.2f}%", "🔴 Sell (Bond Competition)", "Rising bond yields increase the opportunity cost of holding Gold relative to interest-bearing Treasuries.")
+    add_indicator("Global Yields (US10Y > 50 SMA)", f"{current_tnx:.2f}%", "🔴 Sell (Headwind)", "Rising US Treasury yields pull global capital out of emerging markets.")
 
 # --- 3. DASHBOARD UI LAYOUT & CHARTS ---
 col1, col2 = st.columns([2.5, 1])
 
+# Reusable Plotly Timeframe Range Selector
 timeframe_selector = dict(
     buttons=list([
         dict(count=3, label="3M", step="month", stepmode="backward"),
@@ -159,10 +156,11 @@ with col1:
     
     with tab1:
         fig_price = go.Figure()
-        fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='Gold Price', line=dict(color='#E5A937', width=2)))
+        fig_price.add_trace(go.Scatter(x=df.index, y=df['Close'], name='Price', line=dict(color='#00529b', width=2)))
         fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], name='200 SMA', line=dict(color='white', width=1, dash='dash')))
-        fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#00529b', width=1)))
+        fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#E5A937', width=1)))
         
+        # ADD TIMEFRAME SELECTOR HERE
         fig_price.update_xaxes(rangeselector=timeframe_selector)
         fig_price.update_layout(template="plotly_dark", height=400, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
         st.plotly_chart(fig_price, use_container_width=True)
@@ -179,7 +177,7 @@ with col1:
 
     with tab3:
         fig_macd = go.Figure()
-        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD (13,21)', line=dict(color='#3498DB', width=1.5)))
+        fig_macd.add_trace(go.Scatter(x=df.index, y=df['MACD'], name='MACD', line=dict(color='#3498DB', width=1.5)))
         fig_macd.add_trace(go.Scatter(x=df.index, y=df['Signal_Line'], name='Signal', line=dict(color='#E67E22', width=1.5)))
         colors = ['#2ECC71' if val >= 0 else '#E74C3C' for val in df['MACD_Hist']]
         fig_macd.add_trace(go.Bar(x=df.index, y=df['MACD_Hist'], name='Histogram', marker_color=colors))
@@ -190,9 +188,11 @@ with col1:
 
 with col2:
     st.subheader("Live Metrics")
-    st.metric("Gold Price (/oz)", f"${current_price:,.2f}")
-    st.metric("DXY Dollar Index", f"{current_dxy:.2f}")
+    st.metric("BBCA Price", f"Rp {current_price:,.0f}")
     st.metric("US 10Y Yield", f"{current_tnx:.2f}%")
+    
+    ihsg_color = "normal" if bbca_20d > ihsg_20d else "inverse"
+    st.metric("20D Rel. Leadership", f"{bbca_20d:.1f}%", delta=f"{bbca_20d - ihsg_20d:.1f}% vs IHSG", delta_color=ihsg_color)
 
 # --- 4. ALGORITHMIC RECOMMENDATION ---
 st.divider()
