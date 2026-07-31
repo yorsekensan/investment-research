@@ -2,6 +2,7 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 import plotly.graph_objects as go
+from disclaimer import render_disclaimer
 
 # ==========================================
 # ⚙️ ASSET CONFIGURATION
@@ -15,6 +16,7 @@ st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layou
 
 st.title(f"{PAGE_ICON} {PAGE_TITLE} Macro Matrix")
 st.write(DESCRIPTION)
+render_disclaimer()
 st.divider()
 
 # --- 1. DATA FETCHING (BTC, DXY, S&P 500) ---
