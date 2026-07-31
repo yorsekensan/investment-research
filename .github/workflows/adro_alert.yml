@@ -23,7 +23,7 @@ jobs:
 
       - name: Run ADRO Engine
         env:
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-        # Make sure this matches your actual python file name!
         run: python adro_engine.py
+
