@@ -4,7 +4,7 @@ on:
   schedule:
     # Runs at 01:00 UTC and 13:00 UTC, Monday through Friday
     - cron: '0 1,13 * * 1-5'
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
   run-alert-engine:
@@ -12,10 +12,10 @@ jobs:
 
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       - name: Set up Python 3.10
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
