@@ -1,7 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
-from disclaimer import render_disclaimer
+import numpy as np
 
 # ==========================================
 # ⚙️ COMMAND CENTER CONFIGURATION
@@ -14,7 +14,6 @@ st.set_page_config(
 
 st.title("⚡ YS Investment Research Terminal")
 st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
-render_disclaimer()
 st.divider()
 
 # --- 1. BULK DATA FETCHING (MATCHING MATRIX PAGES WITH period="max") ---
@@ -41,13 +40,18 @@ except Exception as e:
 
 # Helper engine to cleanly process each asset independently
 def calculate_asset_score(asset_ticker, data, asset_type):
+    # Failsafe 1: Is the ticker completely missing?
     if asset_ticker not in data.columns:
-        return "N/A", "0 / 6 Buy", "⚪ Data Error"
+        return "N/A", "0 / 6 Buy", "⚪ Data Error (Missing Ticker)"
         
-    # Extract clean individual ticker series (no calendar padding)
-    s_asset = data[asset_ticker].dropna()
-    df = pd.DataFrame(s_asset)
-    df.columns = ['Close']
+    # Failsafe 2: Force data to be numeric, drop NaNs
+    s_asset = pd.Series(data[asset_ticker]).apply(pd.to_numeric, errors='coerce').dropna()
+    
+    # Failsafe 3: Do we have enough trading days to even do the math?
+    if s_asset.empty or len(s_asset) < 20:
+        return "N/A", "0 / 6 Buy", "⚪ Data Error (Insufficient Data)"
+        
+    df = pd.DataFrame({'Close': s_asset})
     
     # Calculate Core Technical Indicators
     df['SMA_50'] = df['Close'].rolling(50).mean()
@@ -64,47 +68,55 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['MACD'] = exp1 - exp2
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
+    # Failsafe 4: Final check before accessing the last row
+    if df.empty:
+        return "N/A", "0 / 6 Buy", "⚪ Data Error (Empty DataFrame)"
+        
     cur = df.iloc[-1]
     
     # Base 4 technical indicators
     buys = 0
-    if cur['Close'] > cur['SMA_200']: buys += 1
-    if cur['Close'] > cur['SMA_50']: buys += 1
-    if cur['RSI'] < 40: buys += 1
-    if cur['MACD'] > cur['Signal']: buys += 1
+    if pd.notna(cur.get('SMA_200')) and cur['Close'] > cur['SMA_200']: buys += 1
+    if pd.notna(cur.get('SMA_50')) and cur['Close'] > cur['SMA_50']: buys += 1
+    if pd.notna(cur.get('RSI')) and cur['RSI'] < 40: buys += 1
+    if pd.notna(cur.get('MACD')) and pd.notna(cur.get('Signal')) and cur['MACD'] > cur['Signal']: buys += 1
     
-    # Clean macro helpers (isolated per ticker)
-    s_dxy = data['DX-Y.NYB'].dropna()
-    s_tnx = data['^TNX'].dropna()
-    s_ihsg = data['^JKSE'].dropna()
-    s_spx = data['^GSPC'].dropna()
-    s_idr = data['IDR=X'].dropna()
+    # Clean macro helpers (Safely coerced to numeric)
+    s_dxy = pd.Series(data.get('DX-Y.NYB', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
+    s_tnx = pd.Series(data.get('^TNX', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
+    s_ihsg = pd.Series(data.get('^JKSE', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
+    s_spx = pd.Series(data.get('^GSPC', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
+    s_idr = pd.Series(data.get('IDR=X', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     
-    # Custom 2 macro indicators per asset type
+    # Custom 2 macro indicators per asset type (Wrapped in safety checks)
     if asset_type == "btc":
-        if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
-        btc_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
-        spx_20d = (s_spx.iloc[-1] - s_spx.iloc[-20]) / s_spx.iloc[-20]
-        if btc_20d > spx_20d: buys += 1
+        if not s_dxy.empty and s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
+        if not s_spx.empty and len(df) >= 20 and len(s_spx) >= 20:
+            btc_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+            spx_20d = (s_spx.iloc[-1] - s_spx.iloc[-20]) / s_spx.iloc[-20]
+            if btc_20d > spx_20d: buys += 1
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "gold":
-        if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
-        if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
+        if not s_dxy.empty and s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
+        if not s_tnx.empty and s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "bbca":
-        bbca_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
-        ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
-        if bbca_20d > ihsg_20d: buys += 1
-        if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
+        if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
+            bbca_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+            ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
+            if bbca_20d > ihsg_20d: buys += 1
+        if not s_tnx.empty and s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
 
     elif asset_type == "adro":
-        if s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]: buys += 1
-        adro_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
-        ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
-        if adro_20d > ihsg_20d: buys += 1
+        if not s_idr.empty and len(s_idr) >= 50:
+            if s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]: buys += 1
+        if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
+            adro_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+            ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
+            if adro_20d > ihsg_20d: buys += 1
         price_str = f"Rp {cur['Close']:,.0f}"
         
     # Determine Regime Status
