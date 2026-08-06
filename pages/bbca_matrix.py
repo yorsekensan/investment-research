@@ -73,95 +73,91 @@ current_signal = float(df['Signal_Line'].iloc[-1])
 current_tnx = float(df_tnx['Close'].iloc[-1])
 tnx_sma50 = float(df_tnx['SMA_50'].iloc[-1])
 
-# --- 2. EVALUATING THE 6 QUANTITATIVE INDICATORS ---
-buy_count = 0
-sell_count = 0
-neutral_count = 0
+# --- 2. HIERARCHICAL CONVICTION SCORING ---
+conviction_score = 0
 indicators = []
 
-# Helper function to append to dictionary with "How to Read" column
-def add_indicator(metric, value, signal, explanation):
-    indicators.append({"Metric": metric, "Current Value": value, "Signal": signal, "How to Read": explanation})
+def add_indicator(metric, weight, value, signal, explanation):
+    indicators.append({
+        "Metric": metric, 
+        "Weight": weight,
+        "Current Value": value, 
+        "Signal": signal, 
+        "How to Read": explanation
+    })
 
-# Ind 1: Price vs 200 SMA
+# Core Regime Boolean (Used for smart-filtering)
+is_bull_regime = pd.notna(df['SMA_200'].iloc[-1]) and (current_price > df['SMA_200'].iloc[-1])
+
+# Ind 1: Price vs 200 SMA (Weight: 30%)
 if pd.notna(df['SMA_200'].iloc[-1]):
     if current_price > df['SMA_200'].iloc[-1]:
-        buy_count += 1
-        add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA indicates a structural macro uptrend and institutional accumulation.")
+        conviction_score += 30
+        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Above 200 SMA", "🟢 Buy", "Primary regime filter. Price > 200 SMA dictates a structural macro uptrend.")
     else:
-        sell_count += 1
-        add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA indicates a structural macro downtrend and institutional distribution.")
+        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Below 200 SMA", "🔴 Sell", "Primary regime filter. Price < 200 SMA dictates a structural macro downtrend.")
 else:
-    neutral_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+    add_indicator("Long-Term Trend (200 SMA)", "30%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
-# Ind 2: Price vs 50 SMA
-if pd.notna(df['SMA_50'].iloc[-1]):
-    if current_price > df['SMA_50'].iloc[-1]:
-        buy_count += 1
-        add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA shows strong medium-term momentum and local support.")
-    else:
-        sell_count += 1
-        add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA shows medium-term weakness and loss of momentum.")
-else:
-    neutral_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
-
-# Ind 3: RSI (14)
-if pd.notna(current_rsi):
-    if current_rsi < 40:
-        buy_count += 1
-        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 suggests the asset is oversold, presenting a high-probability dip-buying zone.")
-    elif current_rsi > 60:
-        sell_count += 1
-        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 60 suggests the asset is overbought and prone to short-term pullbacks/profit-taking.")
-    else:
-        neutral_count += 1
-        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-60 indicates normal price action without extreme momentum.")
-else:
-    neutral_count += 1
-    add_indicator("Momentum Oscillator (RSI)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
-
-# Ind 4: Custom Fast MACD (13, 21)
-if pd.notna(current_macd) and pd.notna(current_signal):
-    if current_macd > current_signal:
-        buy_count += 1
-        add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish trend acceleration.")
-    else:
-        sell_count += 1
-        add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish trend acceleration.")
-else:
-    neutral_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
-
-# Ind 5: Market Leadership (BBCA vs IHSG 20d)
-if pd.notna(bbca_20d) and pd.notna(ihsg_20d):
-    if bbca_20d > ihsg_20d:
-        buy_count += 1
-        add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) > IHSG ({ihsg_20d:.1f}%)", "🟢 Buy (Inflow)", "Asset outperforming the benchmark index signals active institutional capital inflow.")
-    else:
-        sell_count += 1
-        add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) < IHSG ({ihsg_20d:.1f}%)", "🔴 Sell (Outflow)", "Asset underperforming the index signals capital rotation or institutional distribution.")
-else:
-    neutral_count += 1
-    add_indicator("Relative Strength (vs IHSG)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
-
-# Ind 6: Global Yield Tailwind (US 10Y Yield vs 50 SMA)
+# Ind 2: Global Yield Tailwind (Weight: 25%)
 if pd.notna(current_tnx) and pd.notna(tnx_sma50):
     if current_tnx < tnx_sma50:
-        buy_count += 1
-        add_indicator("Global Yields (US10Y < 50 SMA)", f"{current_tnx:.2f}%", "🟢 Buy (Tailwind)", "Falling US Treasury yields push global capital into emerging markets like Indonesia.")
+        conviction_score += 25
+        add_indicator("Global Yields (US10Y vs 50 SMA)", "25%", f"{current_tnx:.2f}%", "🟢 Buy", "Falling US yields create a macro tailwind, pushing capital into EM equities like BBCA.")
     else:
-        sell_count += 1
-        add_indicator("Global Yields (US10Y > 50 SMA)", f"{current_tnx:.2f}%", "🔴 Sell (Headwind)", "Rising US Treasury yields pull global capital out of emerging markets.")
+        add_indicator("Global Yields (US10Y vs 50 SMA)", "25%", f"{current_tnx:.2f}%", "🔴 Sell", "Rising US yields create a macro headwind, pulling capital out of emerging markets.")
 else:
-    neutral_count += 1
-    add_indicator("Global Yields (US10Y vs 50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+    add_indicator("Global Yields (US10Y vs 50 SMA)", "25%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 3: Market Leadership (Weight: 20%)
+if pd.notna(bbca_20d) and pd.notna(ihsg_20d):
+    if bbca_20d > ihsg_20d:
+        conviction_score += 20
+        add_indicator("Relative Strength (vs IHSG)", "20%", f"BBCA > IHSG", "🟢 Buy", "Asset outperforming the benchmark signals active institutional capital inflow.")
+    else:
+        add_indicator("Relative Strength (vs IHSG)", "20%", f"BBCA < IHSG", "🔴 Sell", "Asset underperforming signals capital rotation out of the stock.")
+else:
+    add_indicator("Relative Strength (vs IHSG)", "20%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 4: Price vs 50 SMA (Weight: 10%)
+if pd.notna(df['SMA_50'].iloc[-1]):
+    if current_price > df['SMA_50'].iloc[-1]:
+        conviction_score += 10
+        add_indicator("Medium-Term Trend (50 SMA)", "10%", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA shows strong medium-term momentum and tactical support.")
+    else:
+        add_indicator("Medium-Term Trend (50 SMA)", "10%", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA shows medium-term weakness and loss of momentum.")
+else:
+    add_indicator("Medium-Term Trend (50 SMA)", "10%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 5: Trend Velocity MACD (Weight: 10%)
+if pd.notna(current_macd) and pd.notna(current_signal):
+    if current_macd > current_signal:
+        conviction_score += 10
+        add_indicator("Trend Velocity (MACD 13,21)", "10%", "MACD > Signal", "🟢 Buy", "Short-term bullish trend acceleration.")
+    else:
+        add_indicator("Trend Velocity (MACD 13,21)", "10%", "MACD < Signal", "🔴 Sell", "Short-term bearish trend deceleration.")
+else:
+    add_indicator("Trend Velocity (MACD 13,21)", "10%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 6: Momentum RSI (Weight: 5%)
+if pd.notna(current_rsi):
+    if current_rsi < 40:
+        if is_bull_regime:
+            conviction_score += 5
+            add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🟢 Buy (Dip)", "Oversold during a macro bull regime. High probability dip-buy.")
+        else:
+            add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🔴 Sell (Falling Knife)", "Oversold during a macro bear regime. Avoid catching a falling knife.")
+    elif current_rsi > 60:
+        add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "Overbought conditions prone to short-term pullbacks.")
+    else:
+        add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "Normal price action without extreme momentum.")
+else:
+    add_indicator("Momentum Oscillator (RSI)", "5%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
 
 # --- 3. DASHBOARD UI LAYOUT & CHARTS ---
 col1, col2 = st.columns([2.5, 1])
 
-# Reusable Plotly Timeframe Range Selector
 timeframe_selector = dict(
     buttons=list([
         dict(count=3, label="3M", step="month", stepmode="backward"),
@@ -185,7 +181,6 @@ with col1:
         fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_200'], name='200 SMA', line=dict(color='white', width=1, dash='dash')))
         fig_price.add_trace(go.Scatter(x=df.index, y=df['SMA_50'], name='50 SMA', line=dict(color='#E5A937', width=1)))
         
-        # ADD TIMEFRAME SELECTOR HERE
         fig_price.update_xaxes(rangeselector=timeframe_selector)
         fig_price.update_layout(template="plotly_dark", height=400, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
         st.plotly_chart(fig_price, use_container_width=True)
@@ -193,8 +188,8 @@ with col1:
     with tab2:
         fig_rsi = go.Figure()
         fig_rsi.add_trace(go.Scatter(x=df.index, y=df['RSI'], name='RSI (14)', line=dict(color='#9B59B6', width=2)))
-        fig_rsi.add_hline(y=70, line_dash="dash", line_color="red")
-        fig_rsi.add_hline(y=30, line_dash="dash", line_color="green")
+        fig_rsi.add_hline(y=60, line_dash="dash", line_color="red")
+        fig_rsi.add_hline(y=40, line_dash="dash", line_color="green")
         
         fig_rsi.update_xaxes(rangeselector=timeframe_selector)
         fig_rsi.update_layout(template="plotly_dark", height=400, margin=dict(l=0, r=0, t=20, b=0), plot_bgcolor='#0E1117', paper_bgcolor='#0E1117')
@@ -222,19 +217,19 @@ with col2:
 # --- 4. ALGORITHMIC RECOMMENDATION ---
 st.divider()
 
-# Generate visual distribution bar
-bar_visual = ("🟩" * buy_count) + ("🟨" * neutral_count) + ("🟥" * sell_count)
+st.subheader(f"Algorithmic Conviction Score: {conviction_score}%")
 
-st.subheader(f"Algorithmic Recommendation: {bar_visual}")
+# Progress bar visual
+st.progress(conviction_score / 100.0)
 
-if buy_count >= 4:
-    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
-elif sell_count >= 4:
-    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
+if conviction_score >= 60:
+    st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural tailwinds and momentum are aligned. Favorable regime for capital deployment.")
+elif conviction_score < 40:
+    st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Structural breakdown. High risk of capital loss. Defensive positioning required.")
 else:
-    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count}B | {neutral_count}N | {sell_count}S). Wait for a clear majority breakout.")
+    st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Conflicting signals. Whipsaw risk is high. Wait for structural alignment.")
 
-with st.expander("📊 View Detailed Indicator Breakdown & How to Read", expanded=True):
+with st.expander("📊 View Detailed Indicator Weights & Breakdown", expanded=True):
     st.table(pd.DataFrame(indicators))
 
 st.write("")
