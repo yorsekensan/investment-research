@@ -88,55 +88,79 @@ def add_indicator(metric, value, signal, explanation):
     })
 
 # Ind 1: Price vs 200 SMA
-if current_price > df['SMA_200'].iloc[-1]:
-    buy_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA confirms a structural bull market regime and macro cycle expansion.")
-else:
-    sell_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA confirms a structural bear market regime or deep macro correction.")
-
-# Ind 2: Price vs 50 SMA
-if current_price > df['SMA_50'].iloc[-1]:
-    buy_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA indicates strong medium-term buying momentum and key technical support.")
-else:
-    sell_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA indicates medium-term weakness and loss of momentum.")
-
-# Ind 3: RSI (14)
-if current_rsi < 40:
-    buy_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 indicates heavily oversold conditions, presenting a high-conviction accumulation zone.")
-elif current_rsi > 70:
-    sell_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 70 indicates overbought conditions prone to sharp leverage flushes or corrections.")
+if pd.notna(df['SMA_200'].iloc[-1]):
+    if current_price > df['SMA_200'].iloc[-1]:
+        buy_count += 1
+        add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA confirms a structural bull market regime and macro cycle expansion.")
+    else:
+        sell_count += 1
+        add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA confirms a structural bear market regime or deep macro correction.")
 else:
     neutral_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-70 indicates healthy price action without extreme leverage overextension.")
+    add_indicator("Long-Term Trend (200 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 2: Price vs 50 SMA
+if pd.notna(df['SMA_50'].iloc[-1]):
+    if current_price > df['SMA_50'].iloc[-1]:
+        buy_count += 1
+        add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA indicates strong medium-term buying momentum and key technical support.")
+    else:
+        sell_count += 1
+        add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA indicates medium-term weakness and loss of momentum.")
+else:
+    neutral_count += 1
+    add_indicator("Medium-Term Trend (50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 3: RSI (14)
+if pd.notna(current_rsi):
+    if current_rsi < 40:
+        buy_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 indicates heavily oversold conditions, presenting a high-conviction accumulation zone.")
+    elif current_rsi > 60:
+        sell_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 60 indicates overbought conditions prone to sharp leverage flushes or corrections.")
+    else:
+        neutral_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-60 indicates healthy price action without extreme leverage overextension.")
+else:
+    neutral_count += 1
+    add_indicator("Momentum Oscillator (RSI)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 4: Fast MACD (13, 21)
-if current_macd > current_signal:
-    buy_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish momentum acceleration.")
+if pd.notna(current_macd) and pd.notna(current_signal):
+    if current_macd > current_signal:
+        buy_count += 1
+        add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish momentum acceleration.")
+    else:
+        sell_count += 1
+        add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish momentum deceleration.")
 else:
-    sell_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish momentum deceleration.")
+    neutral_count += 1
+    add_indicator("Trend Velocity (MACD 13,21)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 5: CUSTOM MACRO - Global USD Liquidity (DXY vs 50 SMA)
-if current_dxy < dxy_sma50:
-    buy_count += 1
-    add_indicator("Global USD Liquidity (DXY < 50 SMA)", f"DXY at {current_dxy:.2f}", "🟢 Buy (Liquidity Inflow)", "A weakening US Dollar index creates a macro tailwind for global high-beta assets like BTC.")
+if pd.notna(current_dxy) and pd.notna(dxy_sma50):
+    if current_dxy < dxy_sma50:
+        buy_count += 1
+        add_indicator("Global USD Liquidity (DXY < 50 SMA)", f"DXY at {current_dxy:.2f}", "🟢 Buy (Liquidity Inflow)", "A weakening US Dollar index creates a macro tailwind for global high-beta assets like BTC.")
+    else:
+        sell_count += 1
+        add_indicator("Global USD Liquidity (DXY > 50 SMA)", f"DXY at {current_dxy:.2f}", "🔴 Sell (Liquidity Drain)", "A strengthening US Dollar tightens global financial conditions and suppresses crypto liquidity.")
 else:
-    sell_count += 1
-    add_indicator("Global USD Liquidity (DXY > 50 SMA)", f"DXY at {current_dxy:.2f}", "🔴 Sell (Liquidity Drain)", "A strengthening US Dollar tightens global financial conditions and suppresses crypto liquidity.")
+    neutral_count += 1
+    add_indicator("Global USD Liquidity (DXY vs 50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 6: CUSTOM MACRO - Risk Sentiment (BTC vs S&P 500 20d)
-if btc_20d > spx_20d:
-    buy_count += 1
-    add_indicator("Relative Risk Appetite (vs SPX 20d)", f"BTC ({btc_20d:.1f}%) > SPX ({spx_20d:.1f}%)", "🟢 Buy (Risk-On)", "BTC outperforming US equities signals aggressive global risk-on appetite and speculative inflows.")
+if pd.notna(btc_20d) and pd.notna(spx_20d):
+    if btc_20d > spx_20d:
+        buy_count += 1
+        add_indicator("Relative Risk Appetite (vs SPX 20d)", f"BTC ({btc_20d:.1f}%) > SPX ({spx_20d:.1f}%)", "🟢 Buy (Risk-On)", "BTC outperforming US equities signals aggressive global risk-on appetite and speculative inflows.")
+    else:
+        sell_count += 1
+        add_indicator("Relative Risk Appetite (vs SPX 20d)", f"BTC ({btc_20d:.1f}%) < SPX ({spx_20d:.1f}%)", "🔴 Sell (Risk-Off)", "BTC underperforming US equities signals risk-off hedging or capital flight to safety.")
 else:
-    sell_count += 1
-    add_indicator("Relative Risk Appetite (vs SPX 20d)", f"BTC ({btc_20d:.1f}%) < SPX ({spx_20d:.1f}%)", "🔴 Sell (Risk-Off)", "BTC underperforming US equities signals risk-off hedging or capital flight to safety.")
+    neutral_count += 1
+    add_indicator("Relative Risk Appetite (vs SPX 20d)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # --- 3. DASHBOARD UI LAYOUT & CHARTS ---
 col1, col2 = st.columns([2.5, 1])
@@ -200,14 +224,17 @@ with col2:
 # --- 4. ALGORITHMIC RECOMMENDATION ---
 st.divider()
 
-st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral)")
+# Generate visual distribution bar
+bar_visual = ("🟩" * buy_count) + ("🟨" * neutral_count) + ("🟥" * sell_count)
+
+st.subheader(f"Algorithmic Recommendation: {bar_visual}")
 
 if buy_count >= 4:
-    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}/6 Buy Signals).")
+    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
 elif sell_count >= 4:
-    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({sell_count}/6 Sell Signals).")
+    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
 else:
-    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral). Wait for a clear majority breakout.")
+    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count}B | {neutral_count}N | {sell_count}S). Wait for a clear majority breakout.")
 
 with st.expander("📊 View Detailed Indicator Breakdown & How to Read", expanded=True):
     st.table(pd.DataFrame(indicators))
