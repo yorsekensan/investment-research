@@ -22,7 +22,6 @@ st.divider()
 # --- 1. DATA FETCHING (BBCA, IHSG, US10Y) ---
 @st.cache_data(ttl=3600)
 def fetch_custom_data():
-    # CHANGED: Fetch 'max' period instead of '1y' to support 5Y and All-Time charts
     df_bbca = yf.download(TICKER, period="max", progress=False)
     if isinstance(df_bbca.columns, pd.MultiIndex):
         df_bbca.columns = df_bbca.columns.droplevel(1)
@@ -85,55 +84,79 @@ def add_indicator(metric, value, signal, explanation):
     indicators.append({"Metric": metric, "Current Value": value, "Signal": signal, "How to Read": explanation})
 
 # Ind 1: Price vs 200 SMA
-if current_price > df['SMA_200'].iloc[-1]:
-    buy_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA indicates a structural macro uptrend and institutional accumulation.")
-else:
-    sell_count += 1
-    add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA indicates a structural macro downtrend and institutional distribution.")
-
-# Ind 2: Price vs 50 SMA
-if current_price > df['SMA_50'].iloc[-1]:
-    buy_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA shows strong medium-term momentum and local support.")
-else:
-    sell_count += 1
-    add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA shows medium-term weakness and loss of momentum.")
-
-# Ind 3: RSI (14)
-if current_rsi < 40:
-    buy_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 suggests the asset is oversold, presenting a high-probability dip-buying zone.")
-elif current_rsi > 70:
-    sell_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 70 suggests the asset is overbought and prone to short-term pullbacks/profit-taking.")
+if pd.notna(df['SMA_200'].iloc[-1]):
+    if current_price > df['SMA_200'].iloc[-1]:
+        buy_count += 1
+        add_indicator("Long-Term Trend (200 SMA)", "Price Above 200 SMA", "🟢 Buy", "Price > 200 SMA indicates a structural macro uptrend and institutional accumulation.")
+    else:
+        sell_count += 1
+        add_indicator("Long-Term Trend (200 SMA)", "Price Below 200 SMA", "🔴 Sell", "Price < 200 SMA indicates a structural macro downtrend and institutional distribution.")
 else:
     neutral_count += 1
-    add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-70 indicates normal price action without extreme momentum.")
+    add_indicator("Long-Term Trend (200 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 2: Price vs 50 SMA
+if pd.notna(df['SMA_50'].iloc[-1]):
+    if current_price > df['SMA_50'].iloc[-1]:
+        buy_count += 1
+        add_indicator("Medium-Term Trend (50 SMA)", "Price Above 50 SMA", "🟢 Buy", "Price > 50 SMA shows strong medium-term momentum and local support.")
+    else:
+        sell_count += 1
+        add_indicator("Medium-Term Trend (50 SMA)", "Price Below 50 SMA", "🔴 Sell", "Price < 50 SMA shows medium-term weakness and loss of momentum.")
+else:
+    neutral_count += 1
+    add_indicator("Medium-Term Trend (50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
+
+# Ind 3: RSI (14)
+if pd.notna(current_rsi):
+    if current_rsi < 40:
+        buy_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🟢 Buy (Oversold)", "RSI < 40 suggests the asset is oversold, presenting a high-probability dip-buying zone.")
+    elif current_rsi > 60:
+        sell_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "RSI > 60 suggests the asset is overbought and prone to short-term pullbacks/profit-taking.")
+    else:
+        neutral_count += 1
+        add_indicator("Momentum Oscillator (RSI)", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "RSI between 40-60 indicates normal price action without extreme momentum.")
+else:
+    neutral_count += 1
+    add_indicator("Momentum Oscillator (RSI)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 4: Custom Fast MACD (13, 21)
-if current_macd > current_signal:
-    buy_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish trend acceleration.")
+if pd.notna(current_macd) and pd.notna(current_signal):
+    if current_macd > current_signal:
+        buy_count += 1
+        add_indicator("Trend Velocity (MACD 13,21)", "MACD > Signal", "🟢 Buy", "MACD line above Signal line indicates short-term bullish trend acceleration.")
+    else:
+        sell_count += 1
+        add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish trend acceleration.")
 else:
-    sell_count += 1
-    add_indicator("Trend Velocity (MACD 13,21)", "MACD < Signal", "🔴 Sell", "MACD line below Signal line indicates short-term bearish trend acceleration.")
+    neutral_count += 1
+    add_indicator("Trend Velocity (MACD 13,21)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 5: Market Leadership (BBCA vs IHSG 20d)
-if bbca_20d > ihsg_20d:
-    buy_count += 1
-    add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) > IHSG ({ihsg_20d:.1f}%)", "🟢 Buy (Inflow)", "Asset outperforming the benchmark index signals active institutional capital inflow.")
+if pd.notna(bbca_20d) and pd.notna(ihsg_20d):
+    if bbca_20d > ihsg_20d:
+        buy_count += 1
+        add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) > IHSG ({ihsg_20d:.1f}%)", "🟢 Buy (Inflow)", "Asset outperforming the benchmark index signals active institutional capital inflow.")
+    else:
+        sell_count += 1
+        add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) < IHSG ({ihsg_20d:.1f}%)", "🔴 Sell (Outflow)", "Asset underperforming the index signals capital rotation or institutional distribution.")
 else:
-    sell_count += 1
-    add_indicator("Relative Strength (vs IHSG)", f"BBCA ({bbca_20d:.1f}%) < IHSG ({ihsg_20d:.1f}%)", "🔴 Sell (Outflow)", "Asset underperforming the index signals capital rotation or institutional distribution.")
+    neutral_count += 1
+    add_indicator("Relative Strength (vs IHSG)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 6: Global Yield Tailwind (US 10Y Yield vs 50 SMA)
-if current_tnx < tnx_sma50:
-    buy_count += 1
-    add_indicator("Global Yields (US10Y < 50 SMA)", f"{current_tnx:.2f}%", "🟢 Buy (Tailwind)", "Falling US Treasury yields push global capital into emerging markets like Indonesia.")
+if pd.notna(current_tnx) and pd.notna(tnx_sma50):
+    if current_tnx < tnx_sma50:
+        buy_count += 1
+        add_indicator("Global Yields (US10Y < 50 SMA)", f"{current_tnx:.2f}%", "🟢 Buy (Tailwind)", "Falling US Treasury yields push global capital into emerging markets like Indonesia.")
+    else:
+        sell_count += 1
+        add_indicator("Global Yields (US10Y > 50 SMA)", f"{current_tnx:.2f}%", "🔴 Sell (Headwind)", "Rising US Treasury yields pull global capital out of emerging markets.")
 else:
-    sell_count += 1
-    add_indicator("Global Yields (US10Y > 50 SMA)", f"{current_tnx:.2f}%", "🔴 Sell (Headwind)", "Rising US Treasury yields pull global capital out of emerging markets.")
+    neutral_count += 1
+    add_indicator("Global Yields (US10Y vs 50 SMA)", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # --- 3. DASHBOARD UI LAYOUT & CHARTS ---
 col1, col2 = st.columns([2.5, 1])
@@ -199,14 +222,17 @@ with col2:
 # --- 4. ALGORITHMIC RECOMMENDATION ---
 st.divider()
 
-st.subheader(f"Algorithmic Recommendation ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral)")
+# Generate visual distribution bar
+bar_visual = ("🟩" * buy_count) + ("🟨" * neutral_count) + ("🟥" * sell_count)
+
+st.subheader(f"Algorithmic Recommendation: {bar_visual}")
 
 if buy_count >= 4:
-    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}/6 Buy Signals).")
+    st.success(f"🟢 **MACRO BUY ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
 elif sell_count >= 4:
-    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({sell_count}/6 Sell Signals).")
+    st.error(f"🔴 **MACRO SELL ZONE:** Clear majority alignment ({buy_count}B | {neutral_count}N | {sell_count}S).")
 else:
-    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count} Buy / {sell_count} Sell / {neutral_count} Neutral). Wait for a clear majority breakout.")
+    st.info(f"⚪ **MIXED / NEUTRAL REGIME:** Conflicting signals ({buy_count}B | {neutral_count}N | {sell_count}S). Wait for a clear majority breakout.")
 
 with st.expander("📊 View Detailed Indicator Breakdown & How to Read", expanded=True):
     st.table(pd.DataFrame(indicators))
