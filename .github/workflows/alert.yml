@@ -1,0 +1,39 @@
+name: Quantitative Macro Alerts
+
+on:
+  schedule:
+    # 1. IDX Market Close: 17:00 WIB (10:00 UTC), Monday through Friday
+    - cron: '0 10 * * 1-5'
+    
+    # 2. Global UTC Daily Close: 07:15 WIB (00:15 UTC), Every Day (7 days a week)
+    - cron: '15 0 * * *'
+
+  workflow_dispatch: # Allows manual trigger testing anytime in GitHub UI
+
+jobs:
+  run-matrix-evaluator:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: pip install yfinance pandas requests
+
+      - name: Run Alert Engine
+        env:
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: python alert.py
+
+      - name: Commit state.json memory back to repository
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Auto-update matrix state memory"
+          file_pattern: 'state.json'
