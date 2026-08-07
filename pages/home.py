@@ -16,7 +16,7 @@ st.title("⚡ YS Investment Research Terminal")
 st.write("Institutional-grade quantitative macro tracking across global equities, digital assets, precious metals, and emerging markets.")
 st.divider()
 
-# --- 1. BULK DATA FETCHING (MATCHING MATRIX PAGES WITH period="max") ---
+# --- 1. BULK DATA FETCHING ---
 @st.cache_data(ttl=3600)
 def fetch_command_center_data():
     tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
@@ -38,22 +38,22 @@ except Exception as e:
     st.error(f"Failed to fetch live macro data: {e}")
     st.stop()
 
-# Helper engine to cleanly process each asset independently
+# Helper engine to cleanly process each asset using the 100-Point Hierarchical Engine
 def calculate_asset_score(asset_ticker, data, asset_type):
-    # Failsafe 1: Is the ticker completely missing?
+    # Failsafe 1: Is the ticker missing?
     if asset_ticker not in data.columns:
-        return "N/A", "🟨🟨🟨🟨🟨🟨 (0B | 6N | 0S)", "⚪ Data Error (Missing Ticker)"
+        return "N/A", "0%", "⚪ Data Error (Missing Ticker)"
         
-    # Failsafe 2: Force data to be numeric, drop NaNs
+    # Failsafe 2: Force data to numeric, drop NaNs
     s_asset = pd.Series(data[asset_ticker]).apply(pd.to_numeric, errors='coerce').dropna()
     
-    # Failsafe 3: Do we have enough trading days to even do the math?
+    # Failsafe 3: Insufficient data check
     if s_asset.empty or len(s_asset) < 20:
-        return "N/A", "🟨🟨🟨🟨🟨🟨 (0B | 6N | 0S)", "⚪ Data Error (Insufficient Data)"
+        return "N/A", "0%", "⚪ Data Error (Insufficient Data)"
         
     df = pd.DataFrame({'Close': s_asset})
     
-    # Calculate Core Technical Indicators
+    # Technical Indicators
     df['SMA_50'] = df['Close'].rolling(50).mean()
     df['SMA_200'] = df['Close'].rolling(200).mean()
     
@@ -68,122 +68,85 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['MACD'] = exp1 - exp2
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
-    # Failsafe 4: Final check before accessing the last row
     if df.empty:
-        return "N/A", "🟨🟨🟨🟨🟨🟨 (0B | 6N | 0S)", "⚪ Data Error (Empty DataFrame)"
+        return "N/A", "0%", "⚪ Data Error (Empty DataFrame)"
         
     cur = df.iloc[-1]
+    score = 0
     
-    buys = 0
-    neutrals = 0
-    sells = 0
+    # Core Regime Boolean
+    is_bull_regime = pd.notna(cur.get('SMA_200')) and cur['Close'] > cur['SMA_200']
 
-    # Indicator 1: 200-Day SMA (Structural Trend)
-    if pd.notna(cur.get('SMA_200')):
-        if cur['Close'] > cur['SMA_200']: buys += 1
-        else: sells += 1
-    else: neutrals += 1
+    # Indicator 1: 200-Day SMA (Weight: 30%)
+    if is_bull_regime:
+        score += 30
 
-    # Indicator 2: 50-Day SMA (Medium Trend)
-    if pd.notna(cur.get('SMA_50')):
-        if cur['Close'] > cur['SMA_50']: buys += 1
-        else: sells += 1
-    else: neutrals += 1
+    # Indicator 2: 50-Day SMA (Weight: 10%)
+    if pd.notna(cur.get('SMA_50')) and cur['Close'] > cur['SMA_50']:
+        score += 10
 
-    # Indicator 3: 14-Day RSI (Valuation / Momentum)
+    # Indicator 3: Smart RSI (Weight: 5%)
     if pd.notna(cur.get('RSI')):
-        if cur['RSI'] < 40: buys += 1
-        elif cur['RSI'] > 60: sells += 1
-        else: neutrals += 1
-    else: neutrals += 1
-
-    # Indicator 4: Fast MACD Cross (Cyclical Momentum)
-    if pd.notna(cur.get('MACD')) and pd.notna(cur.get('Signal')):
-        if cur['MACD'] > cur['Signal']: buys += 1
-        else: sells += 1
-    else: neutrals += 1
+        if cur['RSI'] < 40 and is_bull_regime:
+            score += 5  # Dip buy in a bull regime
+            
+    # Indicator 4: Fast MACD (Weight: 10%)
+    if pd.notna(cur.get('MACD')) and pd.notna(cur.get('Signal')) and cur['MACD'] > cur['Signal']:
+        score += 10
     
-    # Clean macro helpers (Safely coerced to numeric)
+    # Clean macro series
     s_dxy = pd.Series(data.get('DX-Y.NYB', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     s_tnx = pd.Series(data.get('^TNX', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     s_ihsg = pd.Series(data.get('^JKSE', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     s_spx = pd.Series(data.get('^GSPC', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     s_idr = pd.Series(data.get('IDR=X', pd.Series(dtype=float))).apply(pd.to_numeric, errors='coerce').dropna()
     
-    # Custom 2 macro indicators per asset type
+    # Custom Macro Evaluation (25% for Factor 1, 20% for Factor 2)
     if asset_type == "btc":
-        if not s_dxy.empty and len(s_dxy) >= 50:
-            if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+        if not s_dxy.empty and len(s_dxy) >= 50 and s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]:
+            score += 25
         if not s_spx.empty and len(df) >= 20 and len(s_spx) >= 20:
             btc_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
             spx_20d = (s_spx.iloc[-1] - s_spx.iloc[-20]) / s_spx.iloc[-20]
-            if btc_20d > spx_20d: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+            if btc_20d > spx_20d: score += 20
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "gold":
-        if not s_dxy.empty and len(s_dxy) >= 50:
-            if s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
-        if not s_tnx.empty and len(s_tnx) >= 50:
-            if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+        if not s_dxy.empty and len(s_dxy) >= 50 and s_dxy.iloc[-1] < s_dxy.rolling(50).mean().iloc[-1]:
+            score += 25
+        if not s_tnx.empty and len(s_tnx) >= 50 and s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]:
+            score += 20
         price_str = f"${cur['Close']:,.2f}"
 
     elif asset_type == "bbca":
+        if not s_tnx.empty and len(s_tnx) >= 50 and s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]:
+            score += 25
         if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
             bbca_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
             ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
-            if bbca_20d > ihsg_20d: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
-        if not s_tnx.empty and len(s_tnx) >= 50:
-            if s_tnx.iloc[-1] < s_tnx.rolling(50).mean().iloc[-1]: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+            if bbca_20d > ihsg_20d: score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
 
     elif asset_type == "adro":
-        if not s_idr.empty and len(s_idr) >= 50:
-            if s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+        if not s_idr.empty and len(s_idr) >= 50 and s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]:
+            score += 25
         if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
             adro_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
             ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
-            if adro_20d > ihsg_20d: buys += 1
-            else: sells += 1
-        else: neutrals += 1
-
+            if adro_20d > ihsg_20d: score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
         
-    # Generate Visual Distribution Bar
-    bar_visual = ("🟩" * buys) + ("🟨" * neutrals) + ("🟥" * sells)
-    consensus_str = f"{bar_visual}  ({buys}B | {neutrals}N | {sells}S)"
-
-    # Determine Overall Regime Status
-    if buys >= 4:
-        regime = "🟢 Macro Buy Zone"
-    elif sells >= 4:
-        regime = "🔴 Macro Sell Zone"
+    # Generate Status Badges based on Conviction Score
+    if score >= 60:
+        regime = "🟢 Macro Bull Engine"
+    elif score < 40:
+        regime = "🔴 Severe Bear Market"
     else:
-        regime = "⚪ Neutral Regime"
+        regime = "⚪ Neutral / Chop"
         
-    return price_str, consensus_str, regime
+    return price_str, f"{score}%", regime
 
-# --- 2. COMPILE COMMAND CENTER SUMMARY TABLE ---
+# --- 2. COMPILE SUMMARY TABLE ---
 assets_meta = [
     {"name": "BBCA (Structural Equity)", "ticker": "BBCA.JK", "type": "bbca", "sector": "Financials / Banking"},
     {"name": "ADRO (Cyclical Energy)", "ticker": "ADRO.JK", "type": "adro", "sector": "Energy / Commodities"},
@@ -193,12 +156,12 @@ assets_meta = [
 
 summary_rows = []
 for item in assets_meta:
-    price, consensus, regime = calculate_asset_score(item["ticker"], data, item["type"])
+    price, conviction, regime = calculate_asset_score(item["ticker"], data, item["type"])
     summary_rows.append({
         "Asset Matrix": item["name"],
         "Sector": item["sector"],
         "Current Price": price,
-        "Macro Consensus": consensus,
+        "Conviction Score": conviction,
         "Regime Status": regime
     })
 
@@ -206,7 +169,7 @@ df_summary = pd.DataFrame(summary_rows)
 
 # --- 3. RENDER UI LAYOUT ---
 st.subheader("🌐 Global Macro Pulse & Asset Summary")
-st.write("Live algorithmic evaluation across all tracked asset classes based on the unified 6-indicator quantitative matrix.")
+st.write("Live algorithmic evaluation across all tracked asset classes based on the unified 100-Point Hierarchical Conviction Matrix.")
 
 st.dataframe(
     df_summary, 
