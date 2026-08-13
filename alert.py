@@ -106,18 +106,37 @@ def main():
     for item in assets:
         price, score_str, regime = calculate_asset_score(item["ticker"], data, item["type"])
         new_state[item["ticker"]] = regime
-        
-        old_regime = old_state.get(item["ticker"], "Initialization")
-        
-        # Check if the regime flipped
-        if old_regime != "Initialization" and old_regime != regime:
-            alerts.append(
-                f"⚡ <b>MACRO REGIME SHIFT: {item['name']}</b>\n\n"
-                f"<b>Previous:</b> {old_regime}\n"
-                f"<b>Current:</b> {regime} (Score: {score_str})\n"
-                f"<b>Last Price:</b> {price}\n\n"
-                f"<i>Check the terminal for detailed factor breakdown.</i>"
-            )
+            
+    # 1. Define Deep Value (Oversold) and Overbought (Greed) states
+    # Ensure your dataframe has the RSI calculated as 'RSI'
+    current_rsi = round(data['RSI'].iloc[-1], 2)
+    
+    if current_rsi <= 30:
+        rsi_status = "🟢 DEEP VALUE (RSI ≤ 30 - Buy Fear)"
+    elif current_rsi >= 70:
+        rsi_status = "🔴 OVERBOUGHT (RSI ≥ 70 - Sell Greed)"
+    else:
+        rsi_status = "⚪ RSI Normal"
+    
+    # 2. Combine Macro Trend + RSI Status into one memory string
+    new_state = f"{regime} | {rsi_status}"
+    old_state_val = old_state.get(ticker, "Initialization")
+    
+    # 3. Trigger alert if EITHER the Macro Regime OR the RSI Status changes
+    if old_state_val != "Initialization" and old_state_val != new_state:
+        message = (
+            f"⚡ <b>MACRO & VALUE SHIFT: {ticker}</b>\n\n"
+            f"<b>Previous:</b> {old_state_val}\n"
+            f"<b>Current:</b> {new_state}\n"
+            f"<b>RSI Level:</b> {current_rsi}\n"
+            f"<b>Last Price:</b> {current_price}\n\n"
+            f"<i>Check the terminal for detailed factor breakdown.</i>"
+        )
+        # Call your Telegram function here
+        send_telegram_alert(message)
+    
+    # 4. Save the new combined state to your dictionary
+    new_state_dict[ticker] = new_state
             
     # Send Telegram Alerts
     if alerts and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
