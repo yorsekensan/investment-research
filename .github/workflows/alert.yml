@@ -2,7 +2,7 @@ name: Quantitative Macro Alerts
 
 on:
   schedule:
-    - cron: '0 0,12 * * *' # Runs automatically twice a day
+    - cron: '0 0,6,12,18 * * *' # 4x a day (07:00, 13:00, 19:00, 01:00 WIB)
   workflow_dispatch: # Allows manual trigger
 
 jobs:
