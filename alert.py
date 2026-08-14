@@ -36,8 +36,6 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-    
-    # Prevent division by zero
     rs = gain / loss.replace(0, 1e-10)
     df['RSI'] = 100 - (100 / (1 + rs))
     
@@ -108,7 +106,8 @@ def main():
         old_state = {}
         
     new_state = {}
-    alerts = []
+    portfolio_summary = []
+    any_shifts = False
     
     # Process assets loop
     for item in assets:
@@ -121,46 +120,56 @@ def main():
             print(f"Skipping {ticker} due to data error.")
             continue
             
-        # Determine Deep Value / Overbought Status
+        # Keep Value logic for the tracker, but remove messy RSI numbers from the text
         if current_rsi is not None and current_rsi <= 30:
-            rsi_status = "🟢 DEEP VALUE (RSI ≤ 30 - Buy Fear)"
+            value_tag = " | 🟢 DEEP VALUE"
         elif current_rsi is not None and current_rsi >= 70:
-            rsi_status = "🔴 OVERBOUGHT (RSI ≥ 70 - Sell Greed)"
+            value_tag = " | 🔴 OVERBOUGHT"
         else:
-            rsi_status = "⚪ RSI Normal"
+            value_tag = ""
             
-        # Combine Macro Trend + RSI Status into state memory string
-        combined_state = f"{regime} | {rsi_status}"
+        # The clean status string saved to memory
+        combined_state = f"{regime}{value_tag}"
         new_state[ticker] = combined_state
         
         old_state_val = old_state.get(ticker, "Initialization")
         
-        # Trigger alert if EITHER the Macro Regime OR the RSI Status changes
-        if old_state_val != "Initialization" and old_state_val != combined_state:
-            rsi_display = current_rsi if current_rsi is not None else "N/A"
-            message = (
-                f"⚡ <b>MACRO & VALUE SHIFT: {name} ({ticker})</b>\n\n"
-                f"<b>Previous:</b> {old_state_val}\n"
-                f"<b>Current:</b> {combined_state}\n"
-                f"<b>RSI Level:</b> {rsi_display}\n"
-                f"<b>Last Price:</b> {price}\n"
-                f"<b>Score:</b> {score_str}\n\n"
-                f"<i>Check terminal for detailed factor breakdown.</i>"
+        # Check if this specific asset caused the shift
+        if old_state_val == "Initialization":
+            any_shifts = True
+            portfolio_summary.append(
+                f"⚡ <b>{name}</b>: {combined_state}\n"
+                f"   <i>(Baseline Locked)</i>\n"
+                f"   Price: {price} | Score: {score_str}"
             )
-            alerts.append(message)
+        elif old_state_val != combined_state:
+            any_shifts = True
+            portfolio_summary.append(
+                f"⚡ <b>{name}</b>: {combined_state}\n"
+                f"   <i>(Shifted from: {old_state_val})</i>\n"
+                f"   Price: {price} | Score: {score_str}"
+            )
+        else:
+            # Asset didn't change, just display its current status cleanly
+            portfolio_summary.append(
+                f"🔹 <b>{name}</b>: {combined_state}\n"
+                f"   Price: {price} | Score: {score_str}"
+            )
             
-    # Send Telegram Alerts
-    if alerts and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
-        for alert_msg in alerts:
+    # Send 1 Consolidated Telegram Alert if ANY asset changed
+    if any_shifts:
+        final_message = "🚨 <b>MACRO PORTFOLIO UPDATE</b>\n\n" + "\n\n".join(portfolio_summary)
+        
+        if TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
             url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
-            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": alert_msg, "parse_mode": "HTML"}
+            payload = {"chat_id": TELEGRAM_CHAT_ID, "text": final_message, "parse_mode": "HTML"}
             response = requests.post(url, json=payload)
             if response.status_code == 200:
-                print(f"Alert sent for an asset.")
+                print("Single summary alert sent successfully.")
             else:
                 print(f"Telegram API Error: {response.text}")
     else:
-        print("No regime shifts detected today, or missing API keys. Staying silent.")
+        print("No regime shifts detected today. Staying silent.")
             
     # Commit new state to memory file
     with open(STATE_FILE, "w") as f:
