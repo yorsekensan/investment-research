@@ -21,19 +21,25 @@ def fetch_data():
     return df_raw
 
 def calculate_asset_score(asset_ticker, data, asset_type):
-    if asset_ticker not in data.columns: return "N/A", "0%", "⚪ Data Error"
+    if asset_ticker not in data.columns: 
+        return "N/A", "0%", "⚪ Data Error", None
     
     s_asset = pd.Series(data[asset_ticker]).apply(pd.to_numeric, errors='coerce').dropna()
-    if s_asset.empty or len(s_asset) < 20: return "N/A", "0%", "⚪ Data Error"
+    if s_asset.empty or len(s_asset) < 20: 
+        return "N/A", "0%", "⚪ Data Error", None
         
     df = pd.DataFrame({'Close': s_asset})
     df['SMA_50'] = df['Close'].rolling(50).mean()
     df['SMA_200'] = df['Close'].rolling(200).mean()
     
+    # RSI Calculation (14-period Wilder/SMA)
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
-    df['RSI'] = 100 - (100 / (1 + (gain / loss)))
+    
+    # Prevent division by zero
+    rs = gain / loss.replace(0, 1e-10)
+    df['RSI'] = 100 - (100 / (1 + rs))
     
     exp1 = df['Close'].ewm(span=13, adjust=False).mean()
     exp2 = df['Close'].ewm(span=21, adjust=False).mean()
@@ -41,6 +47,8 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
     cur = df.iloc[-1]
+    current_rsi = round(cur['RSI'], 2) if pd.notna(cur.get('RSI')) else None
+    
     score = 0
     is_bull_regime = pd.notna(cur.get('SMA_200')) and cur['Close'] > cur['SMA_200']
 
@@ -79,7 +87,7 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     elif score < 40: regime = "🔴 Severe Bear Market"
     else: regime = "⚪ Neutral / Chop"
         
-    return price_str, f"{score}%", regime
+    return price_str, f"{score}%", regime, current_rsi
 
 # 2. STATE TRACKING & ALERT EXECUTION
 def main():
@@ -102,41 +110,44 @@ def main():
     new_state = {}
     alerts = []
     
-    # Process assets
+    # Process assets loop
     for item in assets:
-        price, score_str, regime = calculate_asset_score(item["ticker"], data, item["type"])
-        new_state[item["ticker"]] = regime
+        ticker = item["ticker"]
+        name = item["name"]
+        
+        price, score_str, regime, current_rsi = calculate_asset_score(ticker, data, item["type"])
+        
+        if price == "N/A":
+            print(f"Skipping {ticker} due to data error.")
+            continue
             
-    # 1. Define Deep Value (Oversold) and Overbought (Greed) states
-    # Ensure your dataframe has the RSI calculated as 'RSI'
-    current_rsi = round(data['RSI'].iloc[-1], 2)
-    
-    if current_rsi <= 30:
-        rsi_status = "🟢 DEEP VALUE (RSI ≤ 30 - Buy Fear)"
-    elif current_rsi >= 70:
-        rsi_status = "🔴 OVERBOUGHT (RSI ≥ 70 - Sell Greed)"
-    else:
-        rsi_status = "⚪ RSI Normal"
-    
-    # 2. Combine Macro Trend + RSI Status into one memory string
-    new_state = f"{regime} | {rsi_status}"
-    old_state_val = old_state.get(ticker, "Initialization")
-    
-    # 3. Trigger alert if EITHER the Macro Regime OR the RSI Status changes
-    if old_state_val != "Initialization" and old_state_val != new_state:
-        message = (
-            f"⚡ <b>MACRO & VALUE SHIFT: {ticker}</b>\n\n"
-            f"<b>Previous:</b> {old_state_val}\n"
-            f"<b>Current:</b> {new_state}\n"
-            f"<b>RSI Level:</b> {current_rsi}\n"
-            f"<b>Last Price:</b> {current_price}\n\n"
-            f"<i>Check the terminal for detailed factor breakdown.</i>"
-        )
-        # Call your Telegram function here
-        send_telegram_alert(message)
-    
-    # 4. Save the new combined state to your dictionary
-    new_state_dict[ticker] = new_state
+        # Determine Deep Value / Overbought Status
+        if current_rsi is not None and current_rsi <= 30:
+            rsi_status = "🟢 DEEP VALUE (RSI ≤ 30 - Buy Fear)"
+        elif current_rsi is not None and current_rsi >= 70:
+            rsi_status = "🔴 OVERBOUGHT (RSI ≥ 70 - Sell Greed)"
+        else:
+            rsi_status = "⚪ RSI Normal"
+            
+        # Combine Macro Trend + RSI Status into state memory string
+        combined_state = f"{regime} | {rsi_status}"
+        new_state[ticker] = combined_state
+        
+        old_state_val = old_state.get(ticker, "Initialization")
+        
+        # Trigger alert if EITHER the Macro Regime OR the RSI Status changes
+        if old_state_val != "Initialization" and old_state_val != combined_state:
+            rsi_display = current_rsi if current_rsi is not None else "N/A"
+            message = (
+                f"⚡ <b>MACRO & VALUE SHIFT: {name} ({ticker})</b>\n\n"
+                f"<b>Previous:</b> {old_state_val}\n"
+                f"<b>Current:</b> {combined_state}\n"
+                f"<b>RSI Level:</b> {rsi_display}\n"
+                f"<b>Last Price:</b> {price}\n"
+                f"<b>Score:</b> {score_str}\n\n"
+                f"<i>Check terminal for detailed factor breakdown.</i>"
+            )
+            alerts.append(message)
             
     # Send Telegram Alerts
     if alerts and TELEGRAM_TOKEN and TELEGRAM_CHAT_ID:
@@ -145,15 +156,15 @@ def main():
             payload = {"chat_id": TELEGRAM_CHAT_ID, "text": alert_msg, "parse_mode": "HTML"}
             response = requests.post(url, json=payload)
             if response.status_code == 200:
-                print(f"Alert sent for {item['name']}")
+                print(f"Alert sent for an asset.")
             else:
                 print(f"Telegram API Error: {response.text}")
     else:
         print("No regime shifts detected today, or missing API keys. Staying silent.")
             
-    # Commit new state to memory
+    # Commit new state to memory file
     with open(STATE_FILE, "w") as f:
         json.dump(new_state, f)
-        
+
 if __name__ == "__main__":
     main()
