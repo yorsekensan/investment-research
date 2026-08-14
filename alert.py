@@ -22,17 +22,17 @@ def fetch_data():
 
 def calculate_asset_score(asset_ticker, data, asset_type):
     if asset_ticker not in data.columns: 
-        return "N/A", "0%", "⚪ Data Error", None
+        return "N/A", "0%", "⚪ Data Error"
     
     s_asset = pd.Series(data[asset_ticker]).apply(pd.to_numeric, errors='coerce').dropna()
     if s_asset.empty or len(s_asset) < 20: 
-        return "N/A", "0%", "⚪ Data Error", None
+        return "N/A", "0%", "⚪ Data Error"
         
     df = pd.DataFrame({'Close': s_asset})
     df['SMA_50'] = df['Close'].rolling(50).mean()
     df['SMA_200'] = df['Close'].rolling(200).mean()
     
-    # RSI Calculation (14-period Wilder/SMA)
+    # RSI is calculated silently here ONLY for the 5-point Macro score rule
     delta = df['Close'].diff()
     gain = (delta.where(delta > 0, 0)).rolling(14).mean()
     loss = (-delta.where(delta < 0, 0)).rolling(14).mean()
@@ -45,7 +45,6 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     df['Signal'] = df['MACD'].ewm(span=9, adjust=False).mean()
     
     cur = df.iloc[-1]
-    current_rsi = round(cur['RSI'], 2) if pd.notna(cur.get('RSI')) else None
     
     score = 0
     is_bull_regime = pd.notna(cur.get('SMA_200')) and cur['Close'] > cur['SMA_200']
@@ -85,7 +84,7 @@ def calculate_asset_score(asset_ticker, data, asset_type):
     elif score < 40: regime = "🔴 Severe Bear Market"
     else: regime = "⚪ Neutral / Chop"
         
-    return price_str, f"{score}%", regime, current_rsi
+    return price_str, f"{score}%", regime
 
 # 2. STATE TRACKING & ALERT EXECUTION
 def main():
@@ -114,45 +113,35 @@ def main():
         ticker = item["ticker"]
         name = item["name"]
         
-        price, score_str, regime, current_rsi = calculate_asset_score(ticker, data, item["type"])
+        price, score_str, regime = calculate_asset_score(ticker, data, item["type"])
         
         if price == "N/A":
             print(f"Skipping {ticker} due to data error.")
             continue
             
-        # Keep Value logic for the tracker, but remove messy RSI numbers from the text
-        if current_rsi is not None and current_rsi <= 30:
-            value_tag = " | 🟢 DEEP VALUE"
-        elif current_rsi is not None and current_rsi >= 70:
-            value_tag = " | 🔴 OVERBOUGHT"
-        else:
-            value_tag = ""
-            
-        # The clean status string saved to memory
-        combined_state = f"{regime}{value_tag}"
-        new_state[ticker] = combined_state
-        
+        # The clean status string saved to memory (Regime Only)
+        new_state[ticker] = regime
         old_state_val = old_state.get(ticker, "Initialization")
         
         # Check if this specific asset caused the shift
         if old_state_val == "Initialization":
             any_shifts = True
             portfolio_summary.append(
-                f"⚡ <b>{name}</b>: {combined_state}\n"
+                f"⚡ <b>{name}</b>: {regime}\n"
                 f"   <i>(Baseline Locked)</i>\n"
                 f"   Price: {price} | Score: {score_str}"
             )
-        elif old_state_val != combined_state:
+        elif old_state_val != regime:
             any_shifts = True
             portfolio_summary.append(
-                f"⚡ <b>{name}</b>: {combined_state}\n"
+                f"⚡ <b>{name}</b>: {regime}\n"
                 f"   <i>(Shifted from: {old_state_val})</i>\n"
                 f"   Price: {price} | Score: {score_str}"
             )
         else:
             # Asset didn't change, just display its current status cleanly
             portfolio_summary.append(
-                f"🔹 <b>{name}</b>: {combined_state}\n"
+                f"🔹 <b>{name}</b>: {regime}\n"
                 f"   Price: {price} | Score: {score_str}"
             )
             
