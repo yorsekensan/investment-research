@@ -32,8 +32,8 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: python alert.py
 
-      - name: Commit state.json memory back to repository
+      - - name: Commit changes
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Auto-update matrix state memory"
+          commit_message: "Update state.json"
           file_pattern: 'state.json'
