@@ -107,7 +107,7 @@ with col_table:
 # --- EXPORT ENGINE ---
 st.divider()
 st.subheader("📥 Export Portfolio Simulation")
-st.write("Download your raw data spreadsheet or save the visual dashboard as a PDF.")
+st.write("Download your raw data spreadsheet for local analysis.")
 
 def generate_excel(df, cap, profile):
     output = BytesIO()
@@ -133,29 +133,14 @@ def generate_excel(df, cap, profile):
         
     return output.getvalue()
 
-col_export1, col_export2 = st.columns(2)
-
-with col_export1:
-    try:
-        excel_data = generate_excel(df_alloc, capital, risk_profile)
-        st.download_button(
-            label="📊 Download Excel Data (.xlsx)",
-            data=excel_data,
-            file_name=f"YS_Portfolio_{risk_profile}.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            use_container_width=True
-        )
-    except Exception as e:
-        st.error("Excel generation encountered an issue.")
-
-with col_export2:
-    st.components.v1.html(
-        """
-        <div style="padding-top: 2px;">
-            <button onclick="window.parent.print()" style="width: 100%; height: 44px; background-color: #262730; color: #fafafa; border: 1px solid #41424B; border-radius: 8px; cursor: pointer; font-weight: 500; font-family: 'Source Sans Pro', sans-serif; font-size: 14px; transition: all 0.3s ease;">
-                🖨️ Save Dashboard as PDF (Includes Donut Chart)
-            </button>
-        </div>
-        """,
-        height=60
+try:
+    excel_data = generate_excel(df_alloc, capital, risk_profile)
+    st.download_button(
+        label="📊 Download Excel Data (.xlsx)",
+        data=excel_data,
+        file_name=f"YS_Portfolio_{risk_profile}.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        use_container_width=True
     )
+except Exception as e:
+    st.error("Excel generation encountered an issue.")
