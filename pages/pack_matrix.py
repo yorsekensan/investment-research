@@ -7,10 +7,10 @@ from disclaimer import render_disclaimer
 # ==========================================
 # ⚙️ ASSET CONFIGURATION
 # ==========================================
-PAGE_TITLE = "PACK (Right Issue Energy)"
-PAGE_ICON = "⛏️"
+PAGE_TITLE = "PACK (Small Cap / Rights Issue)"
+PAGE_ICON = "📦"
 TICKER = "PACK.JK"
-DESCRIPTION = "Live quantitative tracking of cyclical energy dynamics. Includes USD/IDR Currency Margin Expansion and Sector Rotation vs IHSG."
+DESCRIPTION = "Live quantitative tracking of packaging manufacturing dynamics. Includes USD/IDR Currency Margin Expansion and Sector Rotation vs IHSG."
 
 st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layout="wide")
 
@@ -93,19 +93,19 @@ is_bull_regime = pd.notna(df['SMA_200'].iloc[-1]) and (current_price > df['SMA_2
 if pd.notna(df['SMA_200'].iloc[-1]):
     if current_price > df['SMA_200'].iloc[-1]:
         conviction_score += 30
-        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Above 200 SMA", "🟢 Buy", "Primary regime filter. Price > 200 SMA dictates a structural energy bull cycle.")
+        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Above 200 SMA", "🟢 Buy", "Primary regime filter. Price > 200 SMA dictates a structural manufacturing bull cycle.")
     else:
-        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Below 200 SMA", "🔴 Sell", "Primary regime filter. Price < 200 SMA dictates a structural commodity contraction cycle.")
+        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Below 200 SMA", "🔴 Sell", "Primary regime filter. Price < 200 SMA dictates a structural contraction cycle.")
 else:
     add_indicator("Long-Term Trend (200 SMA)", "30%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
 # Ind 2: Currency Tailwind (USD/IDR vs 50 SMA) (Weight: 25%)
 if pd.notna(current_idr) and pd.notna(idr_sma50):
-    if current_idr > idr_sma50:
+    if current_idr < idr_sma50:
         conviction_score += 25
-        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🟢 Buy", "Weakening Rupiah increases IDR net export margins for USD-denominated coal sales.")
+        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🟢 Buy", "Strengthening Rupiah lowers imported raw material costs, expanding packaging profit margins.")
     else:
-        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🔴 Sell", "Strengthening Rupiah compresses export margins for domestic energy producers.")
+        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🔴 Sell", "Weakening Rupiah increases COGS (Cost of Goods Sold) for raw manufacturing materials.")
 else:
     add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
@@ -113,9 +113,9 @@ else:
 if pd.notna(PACK_20d) and pd.notna(ihsg_20d):
     if PACK_20d > ihsg_20d:
         conviction_score += 20
-        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK > IHSG", "🟢 Buy", "Energy outperforming the broader benchmark signals institutional sector rotation into commodities.")
+        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK > IHSG", "🟢 Buy", "Outperforming the broader benchmark signals smart money rotation into this specific small-cap/rights issue.")
     else:
-        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK < IHSG", "🔴 Sell", "Underperforming the index indicates capital rotating out of energy into defensives.")
+        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK < IHSG", "🔴 Sell", "Underperforming the index indicates capital is ignoring this asset in the current cycle.")
 else:
     add_indicator("Sector Rotation (vs IHSG 20d)", "20%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
@@ -123,7 +123,7 @@ else:
 if pd.notna(df['SMA_50'].iloc[-1]):
     if current_price > df['SMA_50'].iloc[-1]:
         conviction_score += 10
-        add_indicator("Medium-Term Trend (50 SMA)", "10%", "Price Above 50 SMA", "🟢 Buy", "Shows strong quarterly energy momentum and buying interest.")
+        add_indicator("Medium-Term Trend (50 SMA)", "10%", "Price Above 50 SMA", "🟢 Buy", "Shows strong quarterly momentum and sustained buying interest.")
     else:
         add_indicator("Medium-Term Trend (50 SMA)", "10%", "Price Below 50 SMA", "🔴 Sell", "Shows quarterly trend deceleration and loss of buying pressure.")
 else:
@@ -148,7 +148,7 @@ if pd.notna(current_rsi):
         else:
             add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🔴 Sell (Falling Knife)", "Oversold during a macro bear regime. Avoid catching a falling knife.")
     elif current_rsi > 60:
-        add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "Overextended short-term buying, prone to sharp cyclical pullbacks.")
+        add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "🔴 Sell (Overbought)", "Overextended short-term buying, prone to sharp momentum pullbacks.")
     else:
         add_indicator("Momentum Oscillator (RSI)", "5%", f"RSI at {current_rsi:.1f}", "⚪ Neutral", "Balanced momentum without cyclical exhaustion.")
 else:
@@ -225,11 +225,11 @@ st.subheader(f"Algorithmic Conviction Score: {conviction_score}%")
 st.progress(conviction_score / 100.0)
 
 if conviction_score >= 60:
-    st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural energy tailwinds and currency expansion are aligned. Favorable regime.")
+    st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural manufacturing tailwinds and currency expansion are aligned. Favorable regime.")
 elif conviction_score < 40:
-    st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Structural commodity contraction and margin compression. Defensive stance required.")
+    st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Structural contraction and margin compression. Defensive stance required.")
 else:
-    st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Mixed cyclical signals. High risk of choppy whipsaws. Stand aside.")
+    st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Mixed momentum signals. High risk of choppy whipsaws. Stand aside.")
 
 with st.expander("📊 View Detailed Indicator Weights & Breakdown", expanded=True):
     st.table(pd.DataFrame(indicators))
