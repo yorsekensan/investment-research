@@ -10,7 +10,7 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 def fetch_data():
-    tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
+    tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "PACK.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
     df_raw = yf.download(tickers, period="max", progress=False)
     
     if isinstance(df_raw.columns, pd.MultiIndex):
@@ -80,6 +80,12 @@ def calculate_asset_score(asset_ticker, data, asset_type):
         if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20 and ((df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]) > ((s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]): score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
         
+    elif asset_type == "pack":
+        # Tied to strong IDR (manufacturing cost benefit) and IHSG relative strength
+        if not s_idr.empty and len(s_idr) >= 50 and s_idr.iloc[-1] < s_idr.rolling(50).mean().iloc[-1]: score += 25
+        if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20 and ((df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]) > ((s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]): score += 20
+        price_str = f"Rp {cur['Close']:,.0f}"
+        
     if score >= 60: regime = "🟢 Macro Bull Engine"
     elif score < 40: regime = "🔴 Severe Bear Market"
     else: regime = "⚪ Neutral / Chop"
@@ -94,6 +100,7 @@ def main():
         {"ticker": "BTC-USD", "type": "btc", "name": "Bitcoin"},
         {"ticker": "BBCA.JK", "type": "bbca", "name": "BBCA"},
         {"ticker": "ADRO.JK", "type": "adro", "name": "ADRO"},
+        {"ticker": "PACK.JK", "type": "pack", "name": "PACK"},
         {"ticker": "GC=F", "type": "gold", "name": "Gold"}
     ]
     
