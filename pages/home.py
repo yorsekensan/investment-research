@@ -19,7 +19,7 @@ st.divider()
 # --- 1. BULK DATA FETCHING ---
 @st.cache_data(ttl=3600)
 def fetch_command_center_data():
-    tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
+    tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "PACK.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
     df_raw = yf.download(tickers, period="max", progress=False)
     
     if isinstance(df_raw.columns, pd.MultiIndex):
@@ -136,6 +136,15 @@ def calculate_asset_score(asset_ticker, data, asset_type):
             if adro_20d > ihsg_20d: score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
         
+    elif asset_type == "pack":
+        if not s_idr.empty and len(s_idr) >= 50 and s_idr.iloc[-1] < s_idr.rolling(50).mean().iloc[-1]:
+            score += 25
+        if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
+            pack_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
+            ihsg_20d = (s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]
+            if pack_20d > ihsg_20d: score += 20
+        price_str = f"Rp {cur['Close']:,.0f}"
+        
     # Generate Status Badges based on Conviction Score
     if score >= 60:
         regime = "🟢 Macro Bull Engine"
@@ -150,6 +159,7 @@ def calculate_asset_score(asset_ticker, data, asset_type):
 assets_meta = [
     {"name": "BBCA (Structural Equity)", "ticker": "BBCA.JK", "type": "bbca", "sector": "Financials / Banking"},
     {"name": "ADRO (Cyclical Energy)", "ticker": "ADRO.JK", "type": "adro", "sector": "Energy / Commodities"},
+    {"name": "PACK (Small Cap)", "ticker": "PACK.JK", "type": "pack", "sector": "Manufacturing / Packaging"},
     {"name": "Bitcoin (BTC)", "ticker": "BTC-USD", "type": "btc", "sector": "High-Beta Crypto"},
     {"name": "Gold (Safe Haven)", "ticker": "GC=F", "type": "gold", "sector": "Precious Metals"}
 ]
@@ -180,7 +190,7 @@ st.dataframe(
 st.divider()
 
 st.subheader("📁 Select Asset Terminal")
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 
 with col1:
     st.markdown("### 🏦 BBCA")
@@ -189,12 +199,16 @@ with col1:
 with col2:
     st.markdown("### ⛏️ ADRO")
     st.write("Cyclical coal exporter & currency tailwinds.")
-    
+
 with col3:
+    st.markdown("### 📦 PACK")
+    st.write("Small-cap packaging & rights issue catalyst.")
+    
+with col4:
     st.markdown("### 📈 Bitcoin")
     st.write("Global liquidity & high-beta risk tracking.")
     
-with col4:
+with col5:
     st.markdown("### 🪙 Gold")
     st.write("Safe-haven store of value & yield opportunity cost.")
 
