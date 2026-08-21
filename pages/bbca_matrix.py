@@ -222,9 +222,9 @@ st.subheader(f"Algorithmic Conviction Score: {conviction_score}%")
 # Progress bar visual
 st.progress(conviction_score / 100.0)
 
-if conviction_score >= 60:
+if conviction_score >= 70:
     st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural tailwinds and momentum are aligned. Favorable regime for capital deployment.")
-elif conviction_score < 40:
+elif conviction_score < 30:
     st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Structural breakdown. High risk of capital loss. Defensive positioning required.")
 else:
     st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Conflicting signals. Whipsaw risk is high. Wait for structural alignment.")
