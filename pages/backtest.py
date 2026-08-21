@@ -24,7 +24,7 @@ with st.expander("📖 Backtester User Guide & Interpretation Guide", expanded=F
     * **Simulation Lookback:** Choose your testing window (`1Y`, `2Y`, `3Y`, `5Y`, or `Max`).
 
     **3. How to Evaluate Results**
-    * **Shift History Table:** Logs the exact dates the model flipped regimes (`🟢 Bull Engine` $\ge 60\%$, `🔴 Bear Market` $< 40\%$, `⚪ Neutral` $40-59\%$).
+    * **Shift History Table:** Logs the exact dates the model flipped regimes (`🟢 Bull Engine` $\ge 70\%$, `🔴 Bear Market` $< 30\%$, `⚪ Neutral` $30-69\%$).
     * **Measuring Lag:** Compare the shift date against local price swing highs/lows on the chart to measure how many days after a market reversal the signal fired.
     """)
 
