@@ -86,8 +86,8 @@ def calculate_asset_score(asset_ticker, data, asset_type):
         if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20 and ((df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]) > ((s_ihsg.iloc[-1] - s_ihsg.iloc[-20]) / s_ihsg.iloc[-20]): score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
         
-    if score >= 60: regime = "🟢 Macro Bull Engine"
-    elif score < 40: regime = "🔴 Severe Bear Market"
+    if score >= 70: regime = "🟢 Macro Bull Engine"
+    elif score < 30: regime = "🔴 Severe Bear Market"
     else: regime = "⚪ Neutral / Chop"
         
     return price_str, f"{score}%", regime
