@@ -6,25 +6,57 @@ import plotly.graph_objects as go
 st.set_page_config(page_title="Historical Backtest", layout="wide")
 
 st.title("🔬 Macro Engine Backtesting")
-st.write("Run a historical 3-year simulation to visualize exactly when the 100-point matrix would have triggered regime shifts compared to actual price action.")
+st.write("Run a historical simulation to visualize exactly when the 100-point matrix would have triggered regime shifts compared to actual price action.")
+
+# --- 💡 BACKTEST & USER GUIDE ---
+with st.expander("📖 Backtester User Guide & Interpretation Guide", expanded=False):
+    st.markdown("""
+    **1. Goal of Backtesting**
+    * Test historical regime transitions against actual price trends.
+    * Measure structural lag (moving average confirmation) vs. false signals (whipsaws).
+
+    **2. Input Parameters Explained**
+    * **Target Asset:** The ticker you want to evaluate (e.g., `PACK.JK`, `ADRO.JK`, `BBCA.JK`).
+    * **Macro Overlay:** The macro driver mapped against the asset (`IDR=X` for FX, `^TNX` for US 10Y yields, `DX-Y.NYB` for US Dollar Index).
+    * **Overlay Relationship:**
+        * **Direct:** A **rising** macro indicator adds **+25%** to the score (e.g., ADRO gains from weak IDR).
+        * **Inverse:** A **falling** macro indicator adds **+25%** to the score (e.g., PACK gains from strong IDR; Gold/BTC gain from weak DXY).
+    * **Simulation Lookback:** Choose your testing window (`1Y`, `2Y`, `3Y`, `5Y`, or `Max`).
+
+    **3. How to Evaluate Results**
+    * **Shift History Table:** Logs the exact dates the model flipped regimes (`🟢 Bull Engine` $\ge 60\%$, `🔴 Bear Market` $< 40\%$, `⚪ Neutral` $40-59\%$).
+    * **Measuring Lag:** Compare the shift date against local price swing highs/lows on the chart to measure how many days after a market reversal the signal fired.
+    """)
+
 st.divider()
 
-col1, col2, col3 = st.columns(3)
+# --- INPUT CONTROLS ---
+col1, col2, col3, col4 = st.columns(4)
 with col1:
     ticker = st.selectbox("Target Asset", ["PACK.JK", "ADRO.JK", "BBCA.JK", "BTC-USD", "GC=F"])
 with col2:
     macro_ticker = st.selectbox("Macro Overlay", ["IDR=X", "^TNX", "DX-Y.NYB"])
 with col3:
     macro_mode = st.selectbox("Overlay Relationship", ["inverse", "direct"], 
-                              help="Inverse: Falling macro chart scores 25% (e.g., PACK vs IDR). Direct: Rising macro chart scores 25%.")
+                              help="Inverse: Falling macro chart scores 25%. Direct: Rising macro chart scores 25%.")
+with col4:
+    timeframe = st.selectbox("Simulation Lookback", ["1Y", "2Y", "3Y", "5Y", "Max"], index=2)
+
+# Map lookback string to yfinance period
+tf_map = {"1Y": "1y", "2Y": "2y", "3Y": "3y", "5Y": "5y", "Max": "max"}
+period_str = tf_map[timeframe]
 
 if st.button("▶ Run Historical Simulation", type="primary"):
-    with st.spinner(f"Crunching 3-year historical data for {ticker}..."):
+    with st.spinner(f"Crunching {timeframe} historical data for {ticker}..."):
         try:
             tickers = [ticker, macro_ticker, "^JKSE"]
-            data = yf.download(tickers, period="3y", progress=False)['Close']
+            data = yf.download(tickers, period=period_str, progress=False)['Close']
             
             df = pd.DataFrame({'Close': data[ticker]}).dropna()
+            if len(df) < 50:
+                st.error("Insufficient historical data for selected timeframe.")
+                st.stop()
+                
             df['SMA_50'] = df['Close'].rolling(50).mean()
             df['SMA_200'] = df['Close'].rolling(200).mean()
             
@@ -45,9 +77,11 @@ if st.button("▶ Run Historical Simulation", type="primary"):
             
             scores, regimes = [], []
             
-            # Simulate sequential daily scoring
+            # Adaptive warm-up period for shorter lookback frames
+            warmup_period = min(200, len(df) // 3) if len(df) < 200 else 200
+            
             for i in range(len(df)):
-                if i < 200:
+                if i < warmup_period:
                     scores.append(0)
                     regimes.append("Initialization")
                     continue
@@ -56,7 +90,7 @@ if st.button("▶ Run Historical Simulation", type="primary"):
                 cur = sub.iloc[-1]
                 score = 0
                 
-                is_bull = pd.notna(cur['SMA_200']) and cur['Close'] > cur['SMA_200']
+                is_bull = pd.notna(cur['SMA_200']) and cur['Close'] > cur['SMA_200'] if pd.notna(cur['SMA_200']) else (cur['Close'] > cur['SMA_50'])
                 if is_bull: score += 30
                 if pd.notna(cur['SMA_50']) and cur['Close'] > cur['SMA_50']: score += 10
                 if pd.notna(cur['RSI']) and cur['RSI'] < 40 and is_bull: score += 5
@@ -92,7 +126,7 @@ if st.button("▶ Run Historical Simulation", type="primary"):
             tab1, tab2 = st.tabs(["📊 Shift History Table", "📈 Price vs Regime Chart"])
             
             with tab1:
-                st.subheader(f"Historical Alert Triggers for {ticker}")
+                st.subheader(f"Historical Alert Triggers for {ticker} ({timeframe})")
                 st.write("These are the exact dates the bot would have fired a regime change alert.")
                 
                 display_df = shifts[['Close', 'Regime', 'Score']].copy()
@@ -113,7 +147,7 @@ if st.button("▶ Run Historical Simulation", type="primary"):
                 fig.add_trace(go.Scatter(x=bears.index, y=bears['Close'], mode='markers', name='Bear Regime', marker=dict(color='#E74C3C', size=5)))
                 fig.add_trace(go.Scatter(x=neutrals.index, y=neutrals['Close'], mode='markers', name='Neutral', marker=dict(color='#BDC3C7', size=3)))
                 
-                fig.update_layout(template="plotly_dark", height=550, title=f"{ticker} 3-Year Macro Regime Overlay", margin=dict(l=0, r=0, t=40, b=0))
+                fig.update_layout(template="plotly_dark", height=550, title=f"{ticker} {timeframe} Macro Regime Overlay", margin=dict(l=0, r=0, t=40, b=0))
                 st.plotly_chart(fig, use_container_width=True)
                 
         except Exception as e:
