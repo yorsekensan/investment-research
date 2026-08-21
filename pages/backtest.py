@@ -112,8 +112,8 @@ if st.button("▶ Run Historical Simulation", type="primary"):
                         if a_20d > i_20d: score += 20
                         
                 scores.append(score)
-                if score >= 60: regimes.append("🟢 Bull Engine")
-                elif score < 40: regimes.append("🔴 Bear Market")
+                if score >= 70: regimes.append("🟢 Bull Engine")
+                elif score < 30: regimes.append("🔴 Bear Market")
                 else: regimes.append("⚪ Neutral")
                 
             df['Score'] = scores
