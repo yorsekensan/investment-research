@@ -145,10 +145,10 @@ def calculate_asset_score(asset_ticker, data, asset_type):
             if pack_20d > ihsg_20d: score += 20
         price_str = f"Rp {cur['Close']:,.0f}"
         
-    # Generate Status Badges based on Conviction Score
-    if score >= 60:
+    # --- UNIFIED 70/30 REGIME THRESHOLD --- 21/08/2026
+    if score >= 70:
         regime = "🟢 Macro Bull Engine"
-    elif score < 40:
+    elif score <= 30:
         regime = "🔴 Severe Bear Market"
     else:
         regime = "⚪ Neutral / Chop"
