@@ -220,9 +220,9 @@ st.subheader(f"Algorithmic Conviction Score: {conviction_score}%")
 # Progress bar visual
 st.progress(conviction_score / 100.0)
 
-if conviction_score >= 60:
+if conviction_score >= 70:
     st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural safe-haven demand and opportunity costs are aligned. Favorable regime.")
-elif conviction_score < 40:
+elif conviction_score < 30:
     st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Rising yields and a strong dollar are draining capital from precious metals.")
 else:
     st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Conflicting macro signals. Wait for structural alignment in rates and FX.")
