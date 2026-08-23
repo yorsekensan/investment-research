@@ -144,3 +144,14 @@ try:
     )
 except Exception as e:
     st.error("Excel generation encountered an issue.")
+
+st.write("")
+
+# Support / Donate Banner
+st.markdown("""
+<div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
+    <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
+    <a href="https://saweria.co/yorsekensan" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
+</div>
+""", unsafe_allow_html=True)
+
