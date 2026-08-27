@@ -63,21 +63,19 @@ def run_pack_engine():
         sell_count += 1
 
     # 5. FX Overlay (Inverted for PACK: Strong IDR lowers manufacturing costs)
-    if latest_fx["Close"] < latest_fx["MA50"]:
+    if latest_fx["Close"] > latest_fx["MA50"]:
         buy_count += 1
     else:
         sell_count += 1
 
     # --- DECISION BLOCK ---
-    if buy_count >= 3:
+    # Ensure it uses the strict 70/30 logic
+    if score >= 70:
         verdict = "🟢 PACK BUY ZONE"
-        alert_body = f"PACK is showing structural value with {buy_count}/5 buy signals aligned."
-    elif sell_count >= 3:
+    elif score <= 30:
         verdict = "🔴 PACK SELL ZONE"
-        alert_body = f"PACK is technically overextended with {sell_count}/5 sell signals aligned."
     else:
-        print(f"⚪ Market state is NEUTRAL ({buy_count} Buy / {sell_count} Sell). No Telegram alert pushed.")
-        return
+        verdict = "⚪ NEUTRAL"
 
     message = (
         f"🚨 *PACK MARKET REGIME ALERT* 🚨\n\n"
