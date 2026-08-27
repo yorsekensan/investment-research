@@ -137,7 +137,8 @@ def calculate_asset_score(asset_ticker, data, asset_type):
         price_str = f"Rp {cur['Close']:,.0f}"
         
     elif asset_type == "pack":
-        if not s_idr.empty and len(s_idr) >= 50 and s_idr.iloc[-1] < s_idr.rolling(50).mean().iloc[-1]:
+        # FLIPPED to Direct (>): Weak IDR boosts USD-denominated nickel revenue
+        if not s_idr.empty and len(s_idr) >= 50 and s_idr.iloc[-1] > s_idr.rolling(50).mean().iloc[-1]:
             score += 25
         if not s_ihsg.empty and len(df) >= 20 and len(s_ihsg) >= 20:
             pack_20d = (df['Close'].iloc[-1] - df['Close'].iloc[-20]) / df['Close'].iloc[-20]
