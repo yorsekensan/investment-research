@@ -7,10 +7,10 @@ from disclaimer import render_disclaimer
 # ==========================================
 # ⚙️ ASSET CONFIGURATION
 # ==========================================
-PAGE_TITLE = "PACK (Small Cap / Rights Issue)"
-PAGE_ICON = "📦"
+PAGE_TITLE = "PACK (Nickel Commodity / Rights Issue)"
+PAGE_ICON = "⛏️"
 TICKER = "PACK.JK"
-DESCRIPTION = "Live quantitative tracking of packaging manufacturing dynamics. Includes USD/IDR Currency Margin Expansion and Sector Rotation vs IHSG."
+DESCRIPTION = "Live quantitative tracking of nickel and mineral trading dynamics. Includes USD/IDR Currency Margin Expansion and Sector Rotation vs IHSG."
 
 st.set_page_config(page_title=f"{PAGE_TITLE} Matrix", page_icon=PAGE_ICON, layout="wide")
 
@@ -93,7 +93,7 @@ is_bull_regime = pd.notna(df['SMA_200'].iloc[-1]) and (current_price > df['SMA_2
 if pd.notna(df['SMA_200'].iloc[-1]):
     if current_price > df['SMA_200'].iloc[-1]:
         conviction_score += 30
-        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Above 200 SMA", "🟢 Buy", "Primary regime filter. Price > 200 SMA dictates a structural manufacturing bull cycle.")
+        add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Above 200 SMA", "🟢 Buy", "Primary regime filter. Price > 200 SMA dictates a structural commodity bull cycle.")
     else:
         add_indicator("Long-Term Trend (200 SMA)", "30%", "Price Below 200 SMA", "🔴 Sell", "Primary regime filter. Price < 200 SMA dictates a structural contraction cycle.")
 else:
@@ -101,11 +101,11 @@ else:
 
 # Ind 2: Currency Tailwind (USD/IDR vs 50 SMA) (Weight: 25%)
 if pd.notna(current_idr) and pd.notna(idr_sma50):
-    if current_idr < idr_sma50:
+    if current_idr > idr_sma50:
         conviction_score += 25
-        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🟢 Buy", "Strengthening Rupiah lowers imported raw material costs, expanding packaging profit margins.")
+        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🟢 Buy", "Weakening Rupiah increases IDR conversion revenue from USD-denominated nickel and mineral trades.")
     else:
-        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🔴 Sell", "Weakening Rupiah increases COGS (Cost of Goods Sold) for raw manufacturing materials.")
+        add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", f"Rp {current_idr:,.0f}", "🔴 Sell", "Strengthening Rupiah compresses export margins for domestic commodity producers.")
 else:
     add_indicator("Currency Tailwind (USD/IDR vs 50 SMA)", "25%", "Data Unavailable", "⚪ Neutral", "Awaiting sufficient historical data.")
 
@@ -113,7 +113,7 @@ else:
 if pd.notna(PACK_20d) and pd.notna(ihsg_20d):
     if PACK_20d > ihsg_20d:
         conviction_score += 20
-        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK > IHSG", "🟢 Buy", "Outperforming the broader benchmark signals smart money rotation into this specific small-cap/rights issue.")
+        add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK > IHSG", "🟢 Buy", "Outperforming the broader benchmark signals smart money rotation into this specific small-cap commodity/rights issue.")
     else:
         add_indicator("Sector Rotation (vs IHSG 20d)", "20%", f"PACK < IHSG", "🔴 Sell", "Underperforming the index indicates capital is ignoring this asset in the current cycle.")
 else:
@@ -221,12 +221,12 @@ st.divider()
 
 st.subheader(f"Algorithmic Conviction Score: {conviction_score}%")
 
-# Progress bar visual
 st.progress(conviction_score / 100.0)
 
+# --- UNIFIED 70/30 REGIME THRESHOLD ---
 if conviction_score >= 70:
-    st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural manufacturing tailwinds and currency expansion are aligned. Favorable regime.")
-elif conviction_score < 30:
+    st.success(f"🟢 **MACRO BULL ENGINE (Score: {conviction_score}%):** Structural mineral tailwinds and currency expansion are aligned. Favorable regime.")
+elif conviction_score <= 30:
     st.error(f"🔴 **SEVERE BEAR MARKET (Score: {conviction_score}%):** Structural contraction and margin compression. Defensive stance required.")
 else:
     st.info(f"⚪ **NEUTRAL / SIDEWAYS CHOP (Score: {conviction_score}%):** Mixed momentum signals. High risk of choppy whipsaws. Stand aside.")
@@ -236,10 +236,9 @@ with st.expander("📊 View Detailed Indicator Weights & Breakdown", expanded=Tr
 
 st.write("")
 
-# Support / Donate Banner
 st.markdown("""
 <div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
     <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
-    <a href="https://saweria.co/yorsekensan" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
+    <a href="https://saweria.co/yourname" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
 </div>
 """, unsafe_allow_html=True)
