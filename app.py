@@ -10,7 +10,7 @@ gold_page = st.Page("pages/gold_macro.py", title="Gold (Safe Haven)", icon="🪙
 adro_page = st.Page("pages/adro_matrix.py", title="ADRO (Cyclical)", icon="⛏️")
 pack_page = st.Page("pages/pack_matrix.py", title="PACK (Commodity)", icon="📦")
 foru_page = st.Page("pages/foru_matrix.py", title="FORU (Media/Corp Action)", icon="📰")
-dooh_page = st.Page("pages/dooh_matrix.py", title="DOOH (OOH Media)", icon=" billboards")
+dooh_page = st.Page("pages/dooh_matrix.py", title="DOOH (OOH Media)", icon="🏙️")
 
 # --- UNIFIED NAVIGATION ---
 pg = st.navigation({
