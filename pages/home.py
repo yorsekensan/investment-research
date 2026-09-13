@@ -16,16 +16,13 @@ st.divider()
 @st.cache_data(ttl=3600)
 def fetch_command_center_data():
     tickers = ["BTC-USD", "GC=F", "BBCA.JK", "ADRO.JK", "PACK.JK", "FORU.JK", "DOOH.JK", "DX-Y.NYB", "^GSPC", "^TNX", "^JKSE", "IDR=X"]
+    # Hapus pengambilan spesifik ['Close'] agar kita juga mendapatkan Volume
     df_raw = yf.download(tickers, period="max", progress=False)
     
     if isinstance(df_raw.columns, pd.MultiIndex):
-        if 'Close' in df_raw.columns.levels[0]:
-            data = df_raw['Close']
-        else:
-            data = df_raw.xs('Close', axis=1, level=0, drop_level=True)
-    else:
-        data = df_raw
-    return data
+        # Menyimpan MultiIndex penuh agar bisa memisahkan Close dan Volume nanti
+        return df_raw
+    return df_raw
 
 try:
     data = fetch_command_center_data()
