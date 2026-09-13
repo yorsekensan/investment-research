@@ -7,7 +7,7 @@ import datetime
 st.set_page_config(page_title="Portfolio Allocator", layout="wide")
 
 st.title("⚖️ Quantitative Portfolio Allocator")
-st.caption("Dynamic risk-adjusted allocation across Equities, Commodities, Crypto, and Small-Caps.")
+st.caption("Dynamic risk-adjusted allocation across Equities, Commodities, Crypto, and Transitional Special Situations.")
 
 # --- 1. USER INPUTS & ASSET SELECTION ---
 col1, col2 = st.columns(2)
@@ -23,7 +23,9 @@ all_available_assets = [
     "BBCA (Structural Equity)",
     "Gold (Safe Haven)",
     "ADRO (Cyclical Equity)",
-    "PACK (Small Cap / Rights)",
+    "PACK (Commodity / Rights)",
+    "FORU (Transitional / HMETD)",
+    "DOOH (Tech Pivot)",
     "BTC (High Beta)",
     "IDR Cash (Liquidity)"
 ]
@@ -31,7 +33,7 @@ all_available_assets = [
 selected_assets = st.multiselect(
     "Active Assets in Portfolio",
     options=all_available_assets,
-    default=["BBCA (Structural Equity)", "Gold (Safe Haven)", "ADRO (Cyclical Equity)", "PACK (Small Cap / Rights)", "BTC (High Beta)", "IDR Cash (Liquidity)"]
+    default=all_available_assets # By default, all 8 are selected
 )
 
 if not selected_assets:
@@ -39,22 +41,27 @@ if not selected_assets:
     st.stop()
 
 # --- 2. DYNAMIC WEIGHT ALLOCATION LOGIC ---
+# Base weights are designed to total 100, representing the ideal spread if ALL assets are selected.
 base_weights = {
     "Conservative": {
-        "BBCA (Structural Equity)": 40, "Gold (Safe Haven)": 35, "ADRO (Cyclical Equity)": 10, 
-        "PACK (Small Cap / Rights)": 5, "BTC (High Beta)": 5, "IDR Cash (Liquidity)": 5
+        "BBCA (Structural Equity)": 35, "Gold (Safe Haven)": 30, "ADRO (Cyclical Equity)": 10, 
+        "PACK (Commodity / Rights)": 5, "FORU (Transitional / HMETD)": 2, "DOOH (Tech Pivot)": 3, 
+        "BTC (High Beta)": 5, "IDR Cash (Liquidity)": 10
     },
     "Balanced": {
-        "BBCA (Structural Equity)": 30, "Gold (Safe Haven)": 20, "ADRO (Cyclical Equity)": 15, 
-        "PACK (Small Cap / Rights)": 10, "BTC (High Beta)": 15, "IDR Cash (Liquidity)": 10
+        "BBCA (Structural Equity)": 25, "Gold (Safe Haven)": 15, "ADRO (Cyclical Equity)": 15, 
+        "PACK (Commodity / Rights)": 8, "FORU (Transitional / HMETD)": 5, "DOOH (Tech Pivot)": 7, 
+        "BTC (High Beta)": 15, "IDR Cash (Liquidity)": 10
     },
     "Aggressive": {
-        "BBCA (Structural Equity)": 20, "Gold (Safe Haven)": 10, "ADRO (Cyclical Equity)": 20, 
-        "PACK (Small Cap / Rights)": 15, "BTC (High Beta)": 25, "IDR Cash (Liquidity)": 10
+        "BBCA (Structural Equity)": 15, "Gold (Safe Haven)": 5, "ADRO (Cyclical Equity)": 15, 
+        "PACK (Commodity / Rights)": 12, "FORU (Transitional / HMETD)": 10, "DOOH (Tech Pivot)": 10, 
+        "BTC (High Beta)": 25, "IDR Cash (Liquidity)": 8
     },
     "Macro-Volatility (High Beta)": {
-        "BBCA (Structural Equity)": 10, "Gold (Safe Haven)": 10, "ADRO (Cyclical Equity)": 20, 
-        "PACK (Small Cap / Rights)": 15, "BTC (High Beta)": 40, "IDR Cash (Liquidity)": 5
+        "BBCA (Structural Equity)": 5, "Gold (Safe Haven)": 5, "ADRO (Cyclical Equity)": 10, 
+        "PACK (Commodity / Rights)": 15, "FORU (Transitional / HMETD)": 15, "DOOH (Tech Pivot)": 15, 
+        "BTC (High Beta)": 30, "IDR Cash (Liquidity)": 5
     }
 }
 
@@ -80,12 +87,14 @@ st.subheader(f"Recommended {risk_profile} Portfolio")
 col_chart, col_table = st.columns([1.5, 1])
 
 color_mapping = {
-    "BBCA (Structural Equity)": "#00529b", # BCA Blue
-    "Gold (Safe Haven)": "#FFD700",        # Gold
-    "ADRO (Cyclical Equity)": "#8B4513",   # Coal Brown
-    "PACK (Small Cap / Rights)": "#8E44AD",# Purple
-    "BTC (High Beta)": "#F7931A",          # Bitcoin Orange
-    "IDR Cash (Liquidity)": "#2E8B57"      # Cash Green
+    "BBCA (Structural Equity)": "#00529b",      # BCA Blue
+    "Gold (Safe Haven)": "#FFD700",             # Gold
+    "ADRO (Cyclical Equity)": "#8B4513",        # Coal Brown
+    "PACK (Commodity / Rights)": "#8E44AD",     # Purple
+    "FORU (Transitional / HMETD)": "#E74C3C",   # Crimson Red
+    "DOOH (Tech Pivot)": "#1ABC9C",             # Teal/Cyan
+    "BTC (High Beta)": "#F7931A",               # Bitcoin Orange
+    "IDR Cash (Liquidity)": "#2E8B57"           # Cash Green
 }
 
 with col_chart:
@@ -144,14 +153,3 @@ try:
     )
 except Exception as e:
     st.error("Excel generation encountered an issue.")
-
-st.write("")
-
-# Support / Donate Banner
-st.markdown("""
-<div style='background-color: #1E2127; padding: 20px; border-radius: 10px; border: 1px solid #333; text-align: center;'>
-    <p style='color: #AAA; font-size: 14px; margin-bottom: 10px;'>💡 <i>YS Investment Research is provided free as an open quantitative project. If this model helps your portfolio, consider supporting the data feeds:</i></p>
-    <a href="https://saweria.co/yorsekensan" target="_blank" style='background-color: #E5A937; color: #000; text-decoration: none; padding: 8px 16px; border-radius: 5px; font-weight: bold; font-size: 14px;'>☕ Support / Donate</a>
-</div>
-""", unsafe_allow_html=True)
-
